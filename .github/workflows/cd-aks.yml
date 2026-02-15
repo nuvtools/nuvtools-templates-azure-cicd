@@ -1,0 +1,156 @@
+name: CD - AKS
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment name (e.g., dev, uat, staging, production). Maps to a GitHub Environment for approval gates.'
+        type: string
+        required: true
+      image-uri:
+        description: 'Full container image URI (registry/name:tag).'
+        type: string
+        required: true
+      app-version:
+        description: 'Application version for Helm chart.'
+        type: string
+        required: true
+      aks-cluster-name:
+        description: 'AKS cluster name.'
+        type: string
+        required: true
+      aks-resource-group:
+        description: 'Azure resource group for the AKS cluster.'
+        type: string
+        required: true
+      namespace:
+        description: 'Kubernetes namespace.'
+        type: string
+        required: true
+      release-name:
+        description: 'Helm release name.'
+        type: string
+        required: true
+      chart-path:
+        description: 'Path to a custom Helm chart. Leave empty for the default chart.'
+        type: string
+        required: false
+        default: ''
+      values-file:
+        description: 'Path to the Helm values file (relative to repo root or config repo).'
+        type: string
+        required: true
+      env-values-file:
+        description: 'Path to env-values YAML file for ConfigMap env vars.'
+        type: string
+        required: false
+        default: ''
+      helm-timeout:
+        description: 'Helm upgrade timeout.'
+        type: string
+        required: false
+        default: '5m0s'
+      additional-set-values:
+        description: 'Additional Helm --set arguments (comma-separated key=value).'
+        type: string
+        required: false
+        default: ''
+      config-repo:
+        description: 'GitOps config repository (owner/repo). Leave empty to use values from the consumer repo.'
+        type: string
+        required: false
+        default: ''
+      config-repo-ref:
+        description: 'Git ref for the config repository (branch, tag, or SHA).'
+        type: string
+        required: false
+        default: 'main'
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+      AZURE_CLIENT_SECRET:
+        required: false
+      CONFIG_REPO_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+
+      - name: Checkout config repo
+        if: inputs.config-repo != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.config-repo }}
+          ref: ${{ inputs.config-repo-ref }}
+          token: ${{ secrets.CONFIG_REPO_TOKEN || github.token }}
+          path: config-repo
+
+      - name: Azure login
+        uses: nuvtools/nuvtools-pipelines/.github/actions/azure-login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Checkout nuvtools-pipelines (for default chart)
+        if: inputs.chart-path == ''
+        uses: actions/checkout@v4
+        with:
+          repository: nuvtools/nuvtools-pipelines
+          ref: v1
+          path: nuvtools-pipelines
+          sparse-checkout: charts/default
+
+      - name: Resolve paths
+        id: paths
+        shell: bash
+        run: |
+          # Resolve chart path
+          if [ -n "${{ inputs.chart-path }}" ]; then
+            echo "chart=${{ inputs.chart-path }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "chart=nuvtools-pipelines/charts/default" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Resolve values file path (config repo or consumer repo)
+          if [ -n "${{ inputs.config-repo }}" ]; then
+            echo "values=config-repo/${{ inputs.values-file }}" >> "$GITHUB_OUTPUT"
+            if [ -n "${{ inputs.env-values-file }}" ]; then
+              echo "env-values=config-repo/${{ inputs.env-values-file }}" >> "$GITHUB_OUTPUT"
+            else
+              echo "env-values=" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "values=${{ inputs.values-file }}" >> "$GITHUB_OUTPUT"
+            echo "env-values=${{ inputs.env-values-file }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Helm deploy
+        uses: nuvtools/nuvtools-pipelines/.github/actions/helm-deploy@v1
+        with:
+          aks-cluster-name: ${{ inputs.aks-cluster-name }}
+          aks-resource-group: ${{ inputs.aks-resource-group }}
+          namespace: ${{ inputs.namespace }}
+          release-name: ${{ inputs.release-name }}
+          chart-path: ${{ steps.paths.outputs.chart }}
+          values-file: ${{ steps.paths.outputs.values }}
+          env-values-file: ${{ steps.paths.outputs.env-values }}
+          image-uri: ${{ inputs.image-uri }}
+          app-version: ${{ inputs.app-version }}
+          helm-timeout: ${{ inputs.helm-timeout }}
+          additional-set-values: ${{ inputs.additional-set-values }}

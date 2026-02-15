@@ -1,0 +1,22 @@
+replicaCount: 1
+
+image:
+  repository: <IMAGE_PATH>
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+env:
+  ASPNETCORE_ENVIRONMENT: Development
+  LOG_LEVEL: Debug

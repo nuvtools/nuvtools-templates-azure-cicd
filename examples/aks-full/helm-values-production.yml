@@ -1,0 +1,45 @@
+replicaCount: 3
+
+image:
+  repository: <IMAGE_PATH>
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+  hosts:
+    - host: my-app.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: my-app-tls
+      hosts:
+        - my-app.example.com
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+healthCheck:
+  liveness:
+    path: /health
+  readiness:
+    path: /health/ready

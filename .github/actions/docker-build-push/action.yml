@@ -1,0 +1,103 @@
+name: 'Docker Build & Push'
+description: 'Builds a Docker image and pushes it to Azure Container Registry. Uses a provided Dockerfile or generates a default .NET runtime Dockerfile.'
+
+inputs:
+  registry:
+    description: 'ACR registry name (e.g., myregistry.azurecr.io).'
+    required: true
+  image-name:
+    description: 'Docker image name (without registry prefix or tag).'
+    required: true
+  image-tag:
+    description: 'Docker image tag.'
+    required: true
+  dockerfile:
+    description: 'Path to Dockerfile. Leave empty to use the default .NET runtime Dockerfile.'
+    required: false
+    default: ''
+  build-context:
+    description: 'Docker build context path.'
+    required: false
+    default: '.'
+  artifact-name:
+    description: 'Name of the build artifact to download. Leave empty to skip artifact download.'
+    required: false
+    default: 'build-output'
+  dotnet-version:
+    description: '.NET runtime version for the default Dockerfile (e.g., 10.0).'
+    required: false
+    default: '10.0'
+  entry-point-dll:
+    description: 'Entry point DLL name for the default Dockerfile (e.g., MyApp.API.dll).'
+    required: false
+    default: ''
+  push:
+    description: 'Whether to push the image to the registry. Set to false for PR builds.'
+    required: false
+    default: 'true'
+
+outputs:
+  image-uri:
+    description: 'Full image URI (registry/name:tag).'
+    value: ${{ steps.meta.outputs.image-uri }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download build artifact
+      if: inputs.artifact-name != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ./publish
+
+    - name: Prepare Dockerfile
+      id: dockerfile
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.dockerfile }}" ]; then
+          echo "path=${{ inputs.dockerfile }}" >> "$GITHUB_OUTPUT"
+          echo "Using provided Dockerfile: ${{ inputs.dockerfile }}"
+        else
+          cat > ./Dockerfile.generated <<'DOCKERFILE'
+        ARG DOTNET_VERSION=10.0
+        FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION}
+        WORKDIR /app
+        COPY ./publish ./
+        ENV ASPNETCORE_URLS=http://+:8080
+        EXPOSE 8080
+        ARG ENTRY_POINT_DLL=""
+        ENV APP_DLL=${ENTRY_POINT_DLL}
+        ENTRYPOINT ["sh", "-c", "dotnet $APP_DLL"]
+        DOCKERFILE
+          echo "path=./Dockerfile.generated" >> "$GITHUB_OUTPUT"
+          echo "Using generated default .NET Dockerfile"
+        fi
+
+    - name: ACR login
+      if: inputs.push == 'true'
+      shell: bash
+      run: az acr login --name "$(echo '${{ inputs.registry }}' | cut -d'.' -f1)"
+
+    - name: Build image
+      shell: bash
+      run: |
+        docker build \
+          -f "${{ steps.dockerfile.outputs.path }}" \
+          -t "${{ inputs.registry }}/${{ inputs.image-name }}:${{ inputs.image-tag }}" \
+          --build-arg DOTNET_VERSION="${{ inputs.dotnet-version }}" \
+          --build-arg ENTRY_POINT_DLL="${{ inputs.entry-point-dll }}" \
+          --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+          --label "org.opencontainers.image.revision=${{ github.sha }}" \
+          --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          "${{ inputs.build-context }}"
+
+    - name: Push image
+      if: inputs.push == 'true'
+      shell: bash
+      run: docker push "${{ inputs.registry }}/${{ inputs.image-name }}:${{ inputs.image-tag }}"
+
+    - name: Set output
+      id: meta
+      shell: bash
+      run: echo "image-uri=${{ inputs.registry }}/${{ inputs.image-name }}:${{ inputs.image-tag }}" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,74 @@
+name: Pipeline
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+# Exemplo básico: .NET API com deploy para Azure App Service via zip deploy
+# Usa deployment slots apenas em produção para zero-downtime
+
+jobs:
+  ci:
+    uses: nuvtools/nuvtools-pipelines/.github/workflows/ci.yml@v1
+    with:
+      dotnet-version: '10.0.x'
+      project-path: 'src/MyApp.API/MyApp.API.csproj'
+      test-path: 'tests/MyApp.UnitTests/MyApp.UnitTests.csproj'
+      build-docker: false
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # Deploy para dev (automático no push para main)
+  deploy-dev:
+    needs: ci
+    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'dev'
+    uses: nuvtools/nuvtools-pipelines/.github/workflows/cd-appservice.yml@v1
+    with:
+      environment: dev
+      app-version: ${{ needs.ci.outputs.version }}
+      deploy-mode: artifact
+      app-service-name: my-app-dev
+      resource-group: rg-dev
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # Deploy para staging (tags prerelease)
+  deploy-staging:
+    needs: ci
+    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'staging'
+    uses: nuvtools/nuvtools-pipelines/.github/workflows/cd-appservice.yml@v1
+    with:
+      environment: staging
+      app-version: ${{ needs.ci.outputs.version }}
+      deploy-mode: artifact
+      app-service-name: my-app-staging
+      resource-group: rg-staging
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+  # Deploy para produção com slot swap (tags release)
+  deploy-production:
+    needs: ci
+    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'production'
+    uses: nuvtools/nuvtools-pipelines/.github/workflows/cd-appservice.yml@v1
+    with:
+      environment: production
+      app-version: ${{ needs.ci.outputs.version }}
+      deploy-mode: artifact
+      app-service-name: my-app-prod
+      resource-group: rg-production
+      use-deployment-slot: true
+      slot-name: staging
+    secrets:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

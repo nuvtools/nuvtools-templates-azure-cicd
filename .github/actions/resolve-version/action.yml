@@ -1,0 +1,105 @@
+name: 'Resolve Version'
+description: 'Resolves image tag, environment, and deployment flags from git ref (branch, tag, or PR).'
+
+inputs:
+  run-number:
+    description: 'GitHub Actions run number (github.run_number). Used for dev builds.'
+    required: true
+
+outputs:
+  version:
+    description: 'Resolved image tag / version string.'
+    value: ${{ steps.resolve.outputs.version }}
+  environment:
+    description: 'Target environment resolved from git ref. Defaults: dev (main branch), staging (prerelease tags), production (release tags). Consumers can override via the environment-override input in ci.yml.'
+    value: ${{ steps.resolve.outputs.environment }}
+  is-release:
+    description: 'True if this is a stable release tag (v* without prerelease suffix).'
+    value: ${{ steps.resolve.outputs.is-release }}
+  is-prerelease:
+    description: 'True if this is a prerelease tag (alpha, beta, rc).'
+    value: ${{ steps.resolve.outputs.is-prerelease }}
+  should-deploy:
+    description: 'True if this build should trigger a deployment.'
+    value: ${{ steps.resolve.outputs.should-deploy }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve version and environment
+      id: resolve
+      shell: bash
+      run: |
+        REF="${{ github.ref }}"
+        EVENT="${{ github.event_name }}"
+        RUN_NUMBER="${{ inputs.run-number }}"
+        SHA="${{ github.sha }}"
+        SHA7="${SHA:0:7}"
+
+        VERSION=""
+        ENVIRONMENT=""
+        IS_RELEASE="false"
+        IS_PRERELEASE="false"
+        SHOULD_DEPLOY="false"
+
+        echo "::group::Resolve version"
+        echo "Ref: $REF"
+        echo "Event: $EVENT"
+
+        if [[ "$EVENT" == "pull_request" ]]; then
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          VERSION="pr${PR_NUMBER}-${SHA7}"
+          ENVIRONMENT=""
+          SHOULD_DEPLOY="false"
+          echo "PR build: $VERSION"
+
+        elif [[ "$REF" == refs/tags/v* ]]; then
+          # Strip the 'v' prefix
+          TAG="${REF#refs/tags/v}"
+
+          if [[ "$TAG" == *-alpha* ]] || [[ "$TAG" == *-beta* ]] || [[ "$TAG" == *-rc* ]]; then
+            VERSION="$TAG"
+            ENVIRONMENT="staging"
+            IS_PRERELEASE="true"
+            SHOULD_DEPLOY="true"
+            echo "Prerelease tag: $VERSION -> $ENVIRONMENT"
+          else
+            VERSION="$TAG"
+            ENVIRONMENT="production"
+            IS_RELEASE="true"
+            SHOULD_DEPLOY="true"
+            echo "Release tag: $VERSION -> $ENVIRONMENT"
+          fi
+
+        elif [[ "$REF" == "refs/heads/main" ]] || [[ "$REF" == "refs/heads/master" ]]; then
+          VERSION="dev${RUN_NUMBER}"
+          ENVIRONMENT="dev"
+          SHOULD_DEPLOY="true"
+          echo "Main branch: $VERSION -> $ENVIRONMENT"
+
+        else
+          # Feature branches or other refs — CI only
+          BRANCH="${REF#refs/heads/}"
+          BRANCH_SLUG=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9]/-/g' | cut -c1-30)
+          VERSION="${BRANCH_SLUG}-${SHA7}"
+          ENVIRONMENT=""
+          SHOULD_DEPLOY="false"
+          echo "Feature branch: $VERSION (CI only)"
+        fi
+
+        echo "::endgroup::"
+
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
+        echo "is-release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+        echo "is-prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+        echo "should-deploy=$SHOULD_DEPLOY" >> "$GITHUB_OUTPUT"
+
+        echo "### Version Resolution" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+        echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Version | \`$VERSION\` |" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Environment | \`$ENVIRONMENT\` |" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Is Release | \`$IS_RELEASE\` |" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Is Prerelease | \`$IS_PRERELEASE\` |" >> "$GITHUB_STEP_SUMMARY"
+        echo "| Should Deploy | \`$SHOULD_DEPLOY\` |" >> "$GITHUB_STEP_SUMMARY"

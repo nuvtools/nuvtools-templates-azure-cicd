@@ -1,0 +1,229 @@
+name: CD - App Service
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment name (e.g., dev, uat, staging, production). Maps to a GitHub Environment for approval gates.'
+        type: string
+        required: true
+      app-version:
+        description: 'Application version (used for tagging and logs).'
+        type: string
+        required: true
+      deploy-mode:
+        description: 'Deployment mode: "artifact" (zip deploy) or "docker" (container image).'
+        type: string
+        required: false
+        default: 'artifact'
+      app-service-name:
+        description: 'Azure App Service name for this environment.'
+        type: string
+        required: true
+      resource-group:
+        description: 'Azure resource group containing the App Service.'
+        type: string
+        required: true
+      use-deployment-slot:
+        description: 'Deploy to a slot first, then swap. Optional zero-downtime strategy.'
+        type: boolean
+        required: false
+        default: false
+      slot-name:
+        description: 'Deployment slot name (only used when use-deployment-slot is true).'
+        type: string
+        required: false
+        default: 'staging'
+      artifact-name:
+        description: 'Build artifact name to download (for artifact deploy mode).'
+        type: string
+        required: false
+        default: 'build-output'
+      image-uri:
+        description: 'Full container image URI (for docker deploy mode).'
+        type: string
+        required: false
+        default: ''
+      app-settings-file:
+        description: 'Path to a YAML file with app settings (key: value pairs) to apply before deployment.'
+        type: string
+        required: false
+        default: ''
+      config-repo:
+        description: 'GitOps config repository (owner/repo) for app settings. Leave empty to use consumer repo.'
+        type: string
+        required: false
+        default: ''
+      config-repo-ref:
+        description: 'Git ref for the config repository.'
+        type: string
+        required: false
+        default: 'main'
+    secrets:
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        required: true
+      AZURE_CLIENT_SECRET:
+        required: false
+      CONFIG_REPO_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout consumer repo
+        uses: actions/checkout@v4
+
+      - name: Checkout config repo
+        if: inputs.config-repo != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.config-repo }}
+          ref: ${{ inputs.config-repo-ref }}
+          token: ${{ secrets.CONFIG_REPO_TOKEN || github.token }}
+          path: config-repo
+
+      - name: Azure login
+        uses: nuvtools/nuvtools-pipelines/.github/actions/azure-login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      # --- Artifact mode (zip deploy) ---
+      - name: Download build artifact
+        if: inputs.deploy-mode == 'artifact'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ./deploy-package
+
+      - name: Create zip package
+        if: inputs.deploy-mode == 'artifact'
+        shell: bash
+        run: |
+          cd ./deploy-package
+          zip -r ../app-package.zip .
+          echo "Package size: $(du -h ../app-package.zip | cut -f1)"
+
+      # --- App settings ---
+      - name: Apply app settings
+        if: inputs.app-settings-file != ''
+        shell: bash
+        run: |
+          SETTINGS_PATH="${{ inputs.app-settings-file }}"
+          if [ -n "${{ inputs.config-repo }}" ]; then
+            SETTINGS_PATH="config-repo/$SETTINGS_PATH"
+          fi
+
+          TARGET="${{ inputs.app-service-name }}"
+          RG="${{ inputs.resource-group }}"
+          SLOT_ARG=""
+          if [ "${{ inputs.use-deployment-slot }}" == "true" ]; then
+            SLOT_ARG="--slot ${{ inputs.slot-name }}"
+          fi
+
+          # Auto-detect format: JSON array (legacy) or YAML key-value (default)
+          CONVERTED_PATH="/tmp/app-settings-converted.json"
+
+          if jq -e 'type == "array"' "$SETTINGS_PATH" > /dev/null 2>&1; then
+            echo "Detected JSON array format (legacy), using directly."
+            cp "$SETTINGS_PATH" "$CONVERTED_PATH"
+          else
+            echo "Detected YAML key-value format, converting to Azure CLI JSON array."
+            yq -o=json '.' "$SETTINGS_PATH" \
+              | jq '[to_entries[] | {name: .key, value: (.value | tostring), slotSetting: false}]' \
+              > "$CONVERTED_PATH"
+          fi
+
+          echo "::group::Applying app settings"
+          az webapp config appsettings set \
+            --name "$TARGET" \
+            --resource-group "$RG" \
+            $SLOT_ARG \
+            --settings @"$CONVERTED_PATH"
+          echo "::endgroup::"
+
+      # --- Deploy: Artifact to slot or direct ---
+      - name: Deploy artifact to slot
+        if: inputs.deploy-mode == 'artifact' && inputs.use-deployment-slot
+        shell: bash
+        run: |
+          az webapp deploy \
+            --name "${{ inputs.app-service-name }}" \
+            --resource-group "${{ inputs.resource-group }}" \
+            --slot "${{ inputs.slot-name }}" \
+            --type zip \
+            --src-path ./app-package.zip
+
+      - name: Deploy artifact (direct)
+        if: inputs.deploy-mode == 'artifact' && !inputs.use-deployment-slot
+        shell: bash
+        run: |
+          az webapp deploy \
+            --name "${{ inputs.app-service-name }}" \
+            --resource-group "${{ inputs.resource-group }}" \
+            --type zip \
+            --src-path ./app-package.zip
+
+      # --- Deploy: Docker to slot or direct ---
+      - name: Deploy docker to slot
+        if: inputs.deploy-mode == 'docker' && inputs.use-deployment-slot
+        shell: bash
+        run: |
+          az webapp config container set \
+            --name "${{ inputs.app-service-name }}" \
+            --resource-group "${{ inputs.resource-group }}" \
+            --slot "${{ inputs.slot-name }}" \
+            --container-image-name "${{ inputs.image-uri }}"
+
+      - name: Deploy docker (direct)
+        if: inputs.deploy-mode == 'docker' && !inputs.use-deployment-slot
+        shell: bash
+        run: |
+          az webapp config container set \
+            --name "${{ inputs.app-service-name }}" \
+            --resource-group "${{ inputs.resource-group }}" \
+            --container-image-name "${{ inputs.image-uri }}"
+
+      # --- Slot swap ---
+      - name: Swap deployment slot
+        if: inputs.use-deployment-slot
+        shell: bash
+        run: |
+          echo "::group::Swap slot ${{ inputs.slot-name }} -> production"
+          az webapp deployment slot swap \
+            --name "${{ inputs.app-service-name }}" \
+            --resource-group "${{ inputs.resource-group }}" \
+            --slot "${{ inputs.slot-name }}" \
+            --target-slot production
+          echo "::endgroup::"
+
+      # --- Summary ---
+      - name: Deployment summary
+        shell: bash
+        run: |
+          echo "### App Service Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| App Service | \`${{ inputs.app-service-name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | \`${{ inputs.environment }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Deploy Mode | \`${{ inputs.deploy-mode }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ inputs.app-version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.use-deployment-slot }}" == "true" ]; then
+            echo "| Slot Swap | \`${{ inputs.slot-name }}\` → \`production\` |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "${{ inputs.image-uri }}" ]; then
+            echo "| Image | \`${{ inputs.image-uri }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          fi
