@@ -20,6 +20,8 @@ az ad app create --display-name "github-actions-my-app"
 # Anotar o appId (CLIENT_ID) da saída
 ```
 
+> **Already have an App Registration from another repo?** Skip this step and reuse its `appId` as your `AZURE_CLIENT_ID`. You only need to add new federated credentials (Step 2) and configure GitHub Secrets (Step 4) for the new repository. See [Using one App Registration for multiple repositories](authentication-setup.md#using-one-app-registration-for-multiple-repositories) for details.
+
 ## Step 2: Configure Authentication
 
 ### Option A: OIDC Federated Credentials (Recommended)

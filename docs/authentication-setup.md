@@ -74,6 +74,37 @@ az ad app federated-credential create --id <app-id> --parameters '{
 }'
 ```
 
+### Using one App Registration for multiple repositories
+
+OIDC federated credentials include the repository name in the `subject` claim (e.g., `repo:my-org/my-repo:environment:dev`). This means each repository needs its **own set of federated credentials** — but you can add them all to the **same App Registration**. There is no need to create a new App Registration for every repo.
+
+#### Adding a second repository
+
+If you already have an App Registration for `repo-a` and want to onboard `repo-b`, just add new federated credentials pointing to the new repo:
+
+```bash
+APP_ID="<existing-app-id>"
+
+for ENV in dev staging production; do
+  az ad app federated-credential create --id $APP_ID --parameters "{
+    \"name\": \"repo-b-env-${ENV}\",
+    \"issuer\": \"https://token.actions.githubusercontent.com\",
+    \"subject\": \"repo:<owner>/repo-b:environment:${ENV}\",
+    \"audiences\": [\"api://AzureADTokenExchange\"],
+    \"description\": \"Deploy repo-b to ${ENV}\"
+  }"
+done
+```
+
+Then configure `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` in `repo-b`'s GitHub Secrets using the same values.
+
+#### Limits and recommendations
+
+- Azure allows up to **20 federated credentials** per App Registration. A typical repo using environments consumes 3–5 credentials (one per environment plus optional branch/PR credentials).
+- For a small team with a few services, a single shared App Registration works well.
+- If you approach the 20-credential limit, create a second App Registration for the next group of repos.
+- If the new repository deploys to **different Azure resources** (e.g., a different AKS cluster or resource group), you will also need to add RBAC role assignments for the Service Principal on those resources — see step 4 below.
+
 ### 4. Assign RBAC Roles
 
 ```bash
