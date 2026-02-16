@@ -6,7 +6,7 @@ This guide maps concepts from a typical Azure DevOps GitOps pipeline template to
 
 | Azure DevOps | GitHub Actions | Notes |
 |---|---|---|
-| Pipeline template repo | `nuvtools/nuvtools-pipelines` | Reusable workflows instead of YAML templates |
+| Pipeline template repo | `nuvtools/nuvtools-templates-azure-cicd` | Reusable workflows instead of YAML templates |
 | `repositoryConfiguration` | `config-repo` input | Optional — values can also be inline |
 | `repositoryConsumer` | Consumer repo (triggers the workflow) | Same concept |
 | Stage gates | GitHub Environments | Configure reviewers in Settings > Environments |
@@ -59,8 +59,8 @@ azureSubscription: 'my-service-connection'
 ### GitHub Actions
 
 ```yaml
-# OIDC — sem segredos permanentes
-- uses: nuvtools/nuvtools-pipelines/.github/actions/azure-login@v1
+# OIDC — no permanent secrets
+- uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@v1
   with:
     client-id: ${{ secrets.AZURE_CLIENT_ID }}
     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -84,8 +84,8 @@ See [Authentication Setup](authentication-setup.md) for the full OIDC configurat
 ### GitHub Actions
 
 ```yaml
-# Tudo em uma ação composta
-- uses: nuvtools/nuvtools-pipelines/.github/actions/helm-deploy@v1
+# All in one composite action
+- uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/helm-deploy@v1
   with:
     aks-cluster-name: my-cluster
     aks-resource-group: my-rg
@@ -113,8 +113,8 @@ See [Authentication Setup](authentication-setup.md) for the full OIDC configurat
 ### GitHub Actions
 
 ```yaml
-# Sem 7z — GitHub Artifacts cuida da compressão
-- uses: nuvtools/nuvtools-pipelines/.github/actions/docker-build-push@v1
+# No 7z — GitHub Artifacts handles compression
+- uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/docker-build-push@v1
   with:
     registry: myacr.azurecr.io
     image-name: my-app
@@ -137,10 +137,10 @@ resources:
 ### GitHub Actions (optional)
 
 ```yaml
-# Padrão inline (simples)
-values-file: helm-values-dev.yml  # No repositório do consumidor
+# Inline pattern (simple)
+values-file: helm-values-dev.yml  # In the consumer repo
 
-# Padrão GitOps (enterprise)
+# GitOps pattern (enterprise)
 config-repo: my-org/pipeline-config
 values-file: my-app/values-dev.yaml
 ```
@@ -150,7 +150,7 @@ values-file: my-app/values-dev.yaml
 ### Azure DevOps
 
 ```yaml
-# env-values-dev.yml processado manualmente
+# env-values-dev.yml processed manually
 - script: |
     while read line; do
       helm upgrade --set "env.$line" ...
@@ -162,10 +162,10 @@ values-file: my-app/values-dev.yaml
 The `helm-deploy` action processes `env-values-file` automatically:
 
 ```yaml
-- uses: nuvtools/nuvtools-pipelines/.github/actions/helm-deploy@v1
+- uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/helm-deploy@v1
   with:
     env-values-file: env-values-dev.yml
-    # Cada chave:valor vira --set env.<key>=<value>
+    # Each key:value pair becomes --set env.<key>=<value>
 ```
 
 ## Migration Checklist

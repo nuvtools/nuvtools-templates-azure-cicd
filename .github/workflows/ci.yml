@@ -97,11 +97,11 @@ jobs:
     steps:
       - name: Resolve version
         id: version
-        uses: nuvtools/nuvtools-pipelines/.github/actions/resolve-version@v1
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/resolve-version@v1
         with:
           run-number: ${{ github.run_number }}
 
-      # Permite sobrescrever o ambiente detectado automaticamente
+      # Allow overriding the auto-detected environment
       - name: Apply environment override
         id: env-resolve
         shell: bash
@@ -120,7 +120,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and test
-        uses: nuvtools/nuvtools-pipelines/.github/actions/dotnet-build-test@v1
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/dotnet-build-test@v1
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           project-path: ${{ inputs.project-path }}
@@ -141,7 +141,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Azure login
-        uses: nuvtools/nuvtools-pipelines/.github/actions/azure-login@v1
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@v1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -150,7 +150,7 @@ jobs:
 
       - name: Build and push
         id: build-push
-        uses: nuvtools/nuvtools-pipelines/.github/actions/docker-build-push@v1
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/docker-build-push@v1
         with:
           registry: ${{ inputs.acr-registry }}
           image-name: ${{ inputs.image-name }}

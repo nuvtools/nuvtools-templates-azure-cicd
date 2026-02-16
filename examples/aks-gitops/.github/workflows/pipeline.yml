@@ -7,8 +7,9 @@ on:
   pull_request:
     branches: [main]
 
-# Full example: .NET API deployed to AKS via Helm
-# Uses per-environment Helm values stored in the application repo
+# Example: .NET API deployed to AKS using an external GitOps config repo
+# Helm values are stored in a separate repository (config repo)
+# See examples/pipeline-repo/ for the config repo structure
 
 jobs:
   ci:
@@ -39,12 +40,16 @@ jobs:
       aks-resource-group: rg-dev
       namespace: my-app
       release-name: my-app-api
-      values-file: helm-values-dev.yml
-      env-values-file: env-values-dev.yml
+      # Paths relative to config repo root
+      values-file: my-app/values-dev.yaml
+      env-values-file: my-app/env-values-dev.yaml
+      # GitOps repository with Helm values per environment
+      config-repo: myorg/my-pipeline-repo
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      CONFIG_REPO_TOKEN: ${{ secrets.CONFIG_REPO_TOKEN }}
 
   # Deploy to staging (prerelease tags: v*-alpha*, v*-beta*, v*-rc*)
   deploy-staging:
@@ -59,12 +64,14 @@ jobs:
       aks-resource-group: rg-staging
       namespace: my-app
       release-name: my-app-api
-      values-file: helm-values-staging.yml
-      env-values-file: env-values-staging.yml
+      values-file: my-app/values-staging.yaml
+      env-values-file: my-app/env-values-staging.yaml
+      config-repo: myorg/my-pipeline-repo
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      CONFIG_REPO_TOKEN: ${{ secrets.CONFIG_REPO_TOKEN }}
 
   # Deploy to production (release tags: v*)
   deploy-production:
@@ -79,9 +86,11 @@ jobs:
       aks-resource-group: rg-production
       namespace: my-app
       release-name: my-app-api
-      values-file: helm-values-production.yml
-      env-values-file: env-values-production.yml
+      values-file: my-app/values-production.yaml
+      env-values-file: my-app/env-values-production.yaml
+      config-repo: myorg/my-pipeline-repo
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      CONFIG_REPO_TOKEN: ${{ secrets.CONFIG_REPO_TOKEN }}

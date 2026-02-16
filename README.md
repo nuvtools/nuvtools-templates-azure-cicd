@@ -40,7 +40,7 @@ on:
 
 jobs:
   ci:
-    uses: nuvtools/nuvtools-pipelines/.github/workflows/ci.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci.yml@v1
     with:
       dotnet-version: '10.0.x'
       project-path: 'src/MyApp/MyApp.csproj'
@@ -57,7 +57,7 @@ jobs:
   deploy:
     needs: ci
     if: needs.ci.outputs.should-deploy == 'true'
-    uses: nuvtools/nuvtools-pipelines/.github/workflows/cd-aks.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@v1
     with:
       environment: ${{ needs.ci.outputs.environment }}
       image-uri: ${{ needs.ci.outputs.image-uri }}
@@ -191,13 +191,19 @@ Individual actions can be used standalone:
 | `docker-build-push` | Docker build and ACR push |
 | `helm-deploy` | AKS credentials + Helm upgrade |
 
-Usage: `uses: nuvtools/nuvtools-pipelines/.github/actions/<action-name>@v1`
+Usage: `uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/<action-name>@v1`
 
 ## Examples
 
-- **[AKS Full](examples/aks-full/)** — Complete AKS pipeline with Helm values per environment
-- **[App Service Basic](examples/appservice-basic/)** — App Service zip deploy with optional slot swap
-- **[Pipeline Repo](examples/pipeline-repo/)** — GitOps config repo structure
+See the [examples/](examples/) directory for complete, copy-ready consumer references.
+
+| Example | Target | Description |
+|---|---|---|
+| [aks-full](examples/aks-full/) | AKS | Full pipeline with per-environment Helm values in the app repo |
+| [aks-gitops](examples/aks-gitops/) | AKS | Pipeline using an external GitOps config repository |
+| [appservice-basic](examples/appservice-basic/) | App Service | Zip deploy with optional slot swap |
+| [appservice-docker](examples/appservice-docker/) | App Service | Docker container deploy with slot swap |
+| [pipeline-repo](examples/pipeline-repo/) | — | GitOps configuration repository structure |
 
 ## Documentation
 

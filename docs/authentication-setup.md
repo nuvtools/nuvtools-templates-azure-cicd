@@ -110,19 +110,19 @@ Then configure `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID`
 ```bash
 SP_ID=$(az ad sp show --id <app-id> --query id -o tsv)
 
-# ACR push (para build Docker)
+# ACR push (for Docker build)
 az role assignment create \
   --assignee $SP_ID \
   --role AcrPush \
   --scope /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ContainerRegistry/registries/<acr>
 
-# AKS cluster user (para deploy Helm)
+# AKS cluster user (for Helm deploy)
 az role assignment create \
   --assignee $SP_ID \
   --role "Azure Kubernetes Service Cluster User Role" \
   --scope /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.ContainerService/managedClusters/<cluster>
 
-# OU App Service contributor (para deploy App Service)
+# OR App Service contributor (for App Service deploy)
 az role assignment create \
   --assignee $SP_ID \
   --role "Website Contributor" \
@@ -144,7 +144,7 @@ The CI workflow already includes the required permissions:
 ```yaml
 permissions:
   contents: read
-  id-token: write  # Necessário para OIDC
+  id-token: write  # Required for OIDC
 ```
 
 ## Option B: Service Principal with Client Secret

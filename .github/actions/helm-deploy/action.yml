@@ -15,7 +15,7 @@ inputs:
     description: 'Helm release name.'
     required: true
   chart-path:
-    description: 'Path to a custom Helm chart. Leave empty to use the default chart from nuvtools-pipelines.'
+    description: 'Path to a custom Helm chart. Leave empty to use the default chart.'
     required: false
     default: ''
   values-file:
@@ -61,7 +61,7 @@ runs:
           echo "Using custom chart: ${{ inputs.chart-path }}"
           cp -r "${{ inputs.chart-path }}/." "$WORK_DIR/"
         else
-          echo "Using default nuvtools-pipelines chart"
+          echo "Using default chart"
           SCRIPT_DIR="${{ github.action_path }}"
           CHART_SRC="$SCRIPT_DIR/../../../charts/default"
           cp -r "$CHART_SRC/." "$WORK_DIR/"
@@ -99,11 +99,11 @@ runs:
         SET_ARGS=""
         if [ -n "${{ inputs.env-values-file }}" ] && [ -f "${{ inputs.env-values-file }}" ]; then
           echo "::group::Processing env-values file"
-          # Lê cada par chave:valor do YAML e converte em argumentos --set
+          # Read each key:value pair from YAML and convert to --set arguments
           while IFS=': ' read -r key value; do
-            # Ignora linhas vazias e comentários
+            # Skip empty lines and comments
             [[ -z "$key" || "$key" == \#* ]] && continue
-            # Remove aspas do valor
+            # Strip quotes from value
             value=$(echo "$value" | sed 's/^["'\'']*//;s/["'\'']*$//')
             if [ -n "$SET_ARGS" ]; then
               SET_ARGS="${SET_ARGS},env.${key}=${value}"
@@ -121,13 +121,13 @@ runs:
       run: |
         SET_CMD=""
 
-        # Argumentos de env-values
+        # env-values arguments
         ENV_ARGS="${{ steps.env-values.outputs.args }}"
         if [ -n "$ENV_ARGS" ]; then
           SET_CMD="--set $ENV_ARGS"
         fi
 
-        # Argumentos adicionais
+        # Additional arguments
         EXTRA="${{ inputs.additional-set-values }}"
         if [ -n "$EXTRA" ]; then
           if [ -n "$SET_CMD" ]; then

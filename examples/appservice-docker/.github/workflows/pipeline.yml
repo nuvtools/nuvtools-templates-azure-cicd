@@ -7,8 +7,8 @@ on:
   pull_request:
     branches: [main]
 
-# Full example: .NET API deployed to AKS via Helm
-# Uses per-environment Helm values stored in the application repo
+# Example: .NET API deployed to Azure App Service via Docker container
+# Uses ACR for image storage and deployment slots in production
 
 jobs:
   ci:
@@ -30,17 +30,14 @@ jobs:
   deploy-dev:
     needs: ci
     if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'dev'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
     with:
       environment: dev
-      image-uri: ${{ needs.ci.outputs.image-uri }}
       app-version: ${{ needs.ci.outputs.version }}
-      aks-cluster-name: my-aks-dev
-      aks-resource-group: rg-dev
-      namespace: my-app
-      release-name: my-app-api
-      values-file: helm-values-dev.yml
-      env-values-file: env-values-dev.yml
+      deploy-mode: docker
+      app-service-name: my-app-dev
+      resource-group: rg-dev
+      image-uri: ${{ needs.ci.outputs.image-uri }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -50,37 +47,33 @@ jobs:
   deploy-staging:
     needs: ci
     if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'staging'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
     with:
       environment: staging
-      image-uri: ${{ needs.ci.outputs.image-uri }}
       app-version: ${{ needs.ci.outputs.version }}
-      aks-cluster-name: my-aks-staging
-      aks-resource-group: rg-staging
-      namespace: my-app
-      release-name: my-app-api
-      values-file: helm-values-staging.yml
-      env-values-file: env-values-staging.yml
+      deploy-mode: docker
+      app-service-name: my-app-staging
+      resource-group: rg-staging
+      image-uri: ${{ needs.ci.outputs.image-uri }}
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  # Deploy to production (release tags: v*)
+  # Deploy to production with slot swap (release tags: v*)
   deploy-production:
     needs: ci
     if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'production'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
     with:
       environment: production
-      image-uri: ${{ needs.ci.outputs.image-uri }}
       app-version: ${{ needs.ci.outputs.version }}
-      aks-cluster-name: my-aks-prod
-      aks-resource-group: rg-production
-      namespace: my-app
-      release-name: my-app-api
-      values-file: helm-values-production.yml
-      env-values-file: env-values-production.yml
+      deploy-mode: docker
+      app-service-name: my-app-prod
+      resource-group: rg-production
+      image-uri: ${{ needs.ci.outputs.image-uri }}
+      use-deployment-slot: true
+      slot-name: staging
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

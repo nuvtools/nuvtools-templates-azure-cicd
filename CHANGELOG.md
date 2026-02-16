@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Corrected `uses:` references from `nuvtools/nuvtools-pipelines` to `nuvtools/nuvtools-templates-azure-cicd` in all reusable workflows, composite actions, examples, and docs
+- Translated all Portuguese comments to English across workflows, actions, and documentation
+
+### Added
+
+- New example `aks-gitops` — AKS pipeline using an external GitOps config repository
+- New example `appservice-docker` — App Service pipeline with Docker container deploy
+- README for each example with prerequisites, parameters, and orchestration flow
+- Top-level `examples/README.md` with comparison table and decision guide
+
 ## [1.0.0] - 2026-02-15
 
 ### Added

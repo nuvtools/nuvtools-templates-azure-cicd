@@ -17,7 +17,7 @@ Step-by-step guide to set up NuvTools Pipelines for your .NET project.
 # Criar a App Registration
 az ad app create --display-name "github-actions-my-app"
 
-# Anotar o appId (CLIENT_ID) da saída
+# Note the appId (CLIENT_ID) from the output
 ```
 
 > **Already have an App Registration from another repo?** Skip this step and reuse its `appId` as your `AZURE_CLIENT_ID`. You only need to add new federated credentials (Step 2) and configure GitHub Secrets (Step 4) for the new repository. See [Using one App Registration for multiple repositories](authentication-setup.md#using-one-app-registration-for-multiple-repositories) for details.
@@ -31,7 +31,7 @@ See [Authentication Setup](authentication-setup.md) for detailed instructions.
 ```bash
 APP_ID="<your-app-id>"
 
-# Criar federated credential para a branch main
+# Create federated credential for the main branch
 az ad app federated-credential create --id $APP_ID --parameters '{
   "name": "github-main",
   "issuer": "https://token.actions.githubusercontent.com",
@@ -39,7 +39,7 @@ az ad app federated-credential create --id $APP_ID --parameters '{
   "audiences": ["api://AzureADTokenExchange"]
 }'
 
-# Criar federated credential para tags
+# Create federated credential for tags
 az ad app federated-credential create --id $APP_ID --parameters '{
   "name": "github-tags",
   "issuer": "https://token.actions.githubusercontent.com",
@@ -47,7 +47,7 @@ az ad app federated-credential create --id $APP_ID --parameters '{
   "audiences": ["api://AzureADTokenExchange"]
 }'
 
-# Criar federated credential para environments
+# Create federated credential for environments
 for ENV in dev staging production; do
   az ad app federated-credential create --id $APP_ID --parameters "{
     \"name\": \"github-env-${ENV}\",
@@ -74,15 +74,15 @@ Save the `clientSecret` from the output.
 ```bash
 SP_ID=$(az ad sp show --id $APP_ID --query id -o tsv)
 
-# Permissão no ACR (para push de imagens Docker)
+# ACR permission (for Docker image push)
 ACR_ID=$(az acr show --name myregistry --query id -o tsv)
 az role assignment create --assignee $SP_ID --role AcrPush --scope $ACR_ID
 
-# Permissão no AKS (para deploy via Helm)
+# AKS permission (for Helm deploy)
 AKS_ID=$(az aks show --name my-cluster --resource-group my-rg --query id -o tsv)
 az role assignment create --assignee $SP_ID --role "Azure Kubernetes Service Cluster User Role" --scope $AKS_ID
 
-# OU permissão no App Service (para deploy via zip/container)
+# OR App Service permission (for zip/container deploy)
 WEBAPP_ID=$(az webapp show --name my-app --resource-group my-rg --query id -o tsv)
 az role assignment create --assignee $SP_ID --role "Website Contributor" --scope $WEBAPP_ID
 ```
