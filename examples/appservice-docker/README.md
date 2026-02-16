@@ -6,6 +6,7 @@ Pipeline for deploying a .NET application to Azure App Service using Docker cont
 
 - CI with build, test, Docker build and push to ACR
 - CD to App Service using `docker` deploy mode (container image)
+- Per-environment app settings applied before each deployment
 - Automatic deployment to dev, staging and production
 - Deployment slots with swap in production for zero-downtime
 
@@ -88,5 +89,4 @@ my-app/
 
 ## Customization
 
-- To add per-environment app settings, use `app-settings-file` with a YAML key-value file
 - Use `dockerfile` to point to a custom Dockerfile instead of the default

@@ -208,7 +208,6 @@ See the [examples/](examples/) directory for complete, copy-ready consumer refer
 - [Onboarding Guide](docs/onboarding.md) — Step-by-step setup
 - [Architecture](docs/architecture.md) — Design decisions and flow diagrams
 - [Authentication Setup](docs/authentication-setup.md) — OIDC and SP configuration
-- [Migrating from Azure DevOps](docs/migrating-from-azure-devops.md) — Concept mapping
 
 ## License
 

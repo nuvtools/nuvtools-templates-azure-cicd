@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 - Removed `aks-gitops` and `pipeline-repo` examples — values should live alongside application code rather than in a separate config repo
+- Removed `migrating-from-azure-devops` documentation
 
 ## [1.0.0] - 2026-02-15
 
@@ -37,4 +38,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Default Helm chart with ConfigMap env var support
 - Default .NET runtime Dockerfile
 - Examples for AKS full, App Service basic, and GitOps pipeline repo patterns
-- Documentation: onboarding, architecture, authentication setup, migration guide
+- Documentation: onboarding, architecture, authentication setup

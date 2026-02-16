@@ -6,6 +6,7 @@ Pipeline for deploying a .NET application to Azure App Service using artifact-ba
 
 - CI with build and test (no Docker build needed)
 - CD to App Service via zip deploy (artifact mode)
+- Per-environment app settings applied before each deployment
 - Automatic deployment to dev, staging and production
 - Deployment slots with swap in production for zero-downtime
 
@@ -76,5 +77,4 @@ my-app/
 
 ## Customization
 
-- To add per-environment app settings, use `app-settings-file` with a YAML key-value file
 - To switch to Docker-based deployment, see the [appservice-docker](../appservice-docker/) example
