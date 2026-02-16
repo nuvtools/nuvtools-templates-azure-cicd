@@ -1,4 +1,5 @@
-name: Pipeline
+name: Build & Deploy App Service
+run-name: Build & Deploy App Service 🚀 ${{ github.ref_name }}
 
 on:
   push:

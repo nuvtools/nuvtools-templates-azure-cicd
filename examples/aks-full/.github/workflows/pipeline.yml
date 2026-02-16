@@ -1,4 +1,5 @@
-name: Pipeline
+name: Build & Deploy AKS
+run-name: Build & Deploy AKS 🚀 ${{ github.ref_name }}
 
 on:
   push:
