@@ -38,6 +38,7 @@ jobs:
       app-service-name: my-app-dev
       resource-group: rg-dev
       image-uri: ${{ needs.ci.outputs.image-uri }}
+      app-settings-file: app-settings-dev.yml
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -55,6 +56,7 @@ jobs:
       app-service-name: my-app-staging
       resource-group: rg-staging
       image-uri: ${{ needs.ci.outputs.image-uri }}
+      app-settings-file: app-settings-staging.yml
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -72,6 +74,7 @@ jobs:
       app-service-name: my-app-prod
       resource-group: rg-production
       image-uri: ${{ needs.ci.outputs.image-uri }}
+      app-settings-file: app-settings-production.yml
       use-deployment-slot: true
       slot-name: staging
     secrets:

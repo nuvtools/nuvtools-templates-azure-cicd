@@ -200,10 +200,8 @@ See the [examples/](examples/) directory for complete, copy-ready consumer refer
 | Example | Target | Description |
 |---|---|---|
 | [aks-full](examples/aks-full/) | AKS | Full pipeline with per-environment Helm values in the app repo |
-| [aks-gitops](examples/aks-gitops/) | AKS | Pipeline using an external GitOps config repository |
 | [appservice-basic](examples/appservice-basic/) | App Service | Zip deploy with optional slot swap |
 | [appservice-docker](examples/appservice-docker/) | App Service | Docker container deploy with slot swap |
-| [pipeline-repo](examples/pipeline-repo/) | — | GitOps configuration repository structure |
 
 ## Documentation
 

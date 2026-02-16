@@ -85,4 +85,3 @@ my-app/
 - Add `chart-path` to use a custom Helm chart instead of the built-in default
 - Add `additional-set-values` to override specific Helm values via `--set`
 - Add `helm-timeout` to customize the Helm upgrade timeout (default: `5m0s`)
-- To move values to a separate repo, see the [aks-gitops](../aks-gitops/) example

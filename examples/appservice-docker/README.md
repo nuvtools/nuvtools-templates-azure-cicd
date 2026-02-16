@@ -32,6 +32,9 @@ my-app/
   tests/
     MyApp.UnitTests/
       MyApp.UnitTests.csproj
+  app-settings-dev.yml              (optional - per-environment app settings)
+  app-settings-staging.yml
+  app-settings-production.yml
   .github/
     workflows/
       pipeline.yml          <-- copy from this example
@@ -70,6 +73,7 @@ my-app/
 |---|---|
 | `deploy-mode` | `docker` — deploy via container image |
 | `image-uri` | Full image URI (from CI output) |
+| `app-settings-file` | App settings file (e.g., `app-settings-dev.yml`) |
 | `use-deployment-slot` | `true` in production for zero-downtime |
 | `slot-name` | Slot name (default: `staging`) |
 
@@ -85,5 +89,4 @@ my-app/
 ## Customization
 
 - To add per-environment app settings, use `app-settings-file` with a YAML key-value file
-- To use an external config repo for settings, add `config-repo` and the `CONFIG_REPO_TOKEN` secret
 - Use `dockerfile` to point to a custom Dockerfile instead of the default

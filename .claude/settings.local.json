@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(yamllint:*)"
+      "Bash(yamllint:*)",
+      "Bash(git -C \"D:/Projects/NuvTools/nuvtools-templates-azure-cicd\" show HEAD -- examples/pipeline-repo/)",
+      "Bash(git -C \"D:/Projects/NuvTools/nuvtools-templates-azure-cicd\" ls-tree -r --name-only HEAD -- examples/pipeline-repo/)"
     ]
   }
 }

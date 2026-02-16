@@ -134,5 +134,4 @@ Check the **Actions** tab in GitHub to verify the pipeline runs successfully.
 ## Next Steps
 
 - Review the [Architecture](architecture.md) for design decisions
-- Set up [GitOps config repo](../examples/pipeline-repo/) for multi-service deployments
 - Configure health check paths in your Helm values

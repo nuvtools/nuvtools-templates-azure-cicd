@@ -14,10 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- New example `aks-gitops` — AKS pipeline using an external GitOps config repository
 - New example `appservice-docker` — App Service pipeline with Docker container deploy
 - README for each example with prerequisites, parameters, and orchestration flow
 - Top-level `examples/README.md` with comparison table and decision guide
+
+### Removed
+
+- Removed `aks-gitops` and `pipeline-repo` examples — values should live alongside application code rather than in a separate config repo
 
 ## [1.0.0] - 2026-02-15
 

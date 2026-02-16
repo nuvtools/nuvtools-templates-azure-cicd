@@ -34,6 +34,7 @@ jobs:
       deploy-mode: artifact
       app-service-name: my-app-dev
       resource-group: rg-dev
+      app-settings-file: app-settings-dev.yml
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -50,6 +51,7 @@ jobs:
       deploy-mode: artifact
       app-service-name: my-app-staging
       resource-group: rg-staging
+      app-settings-file: app-settings-staging.yml
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
@@ -66,6 +68,7 @@ jobs:
       deploy-mode: artifact
       app-service-name: my-app-prod
       resource-group: rg-production
+      app-settings-file: app-settings-production.yml
       use-deployment-slot: true
       slot-name: staging
     secrets:
