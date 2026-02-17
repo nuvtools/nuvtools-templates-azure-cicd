@@ -18,7 +18,6 @@ jobs:
       dotnet-version: '10.0.x'
       project-path: 'src/MyApp.API/MyApp.API.csproj'
       test-path: 'tests/MyApp.UnitTests/MyApp.UnitTests.csproj'
-      build-docker: false
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

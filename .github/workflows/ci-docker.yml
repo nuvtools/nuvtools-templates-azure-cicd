@@ -1,4 +1,4 @@
-name: CI
+name: CI (Docker)
 
 on:
   workflow_call:
@@ -22,6 +22,24 @@ on:
         type: string
         required: false
         default: 'Release'
+      acr-registry:
+        description: 'ACR registry name (e.g., myregistry.azurecr.io).'
+        type: string
+        required: true
+      image-name:
+        description: 'Docker image name (without registry or tag).'
+        type: string
+        required: true
+      dockerfile:
+        description: 'Path to Dockerfile. Leave empty for default .NET Dockerfile.'
+        type: string
+        required: false
+        default: ''
+      entry-point-dll:
+        description: 'Entry point DLL for default Dockerfile.'
+        type: string
+        required: false
+        default: ''
       publish-artifacts:
         description: 'Whether to publish build artifacts. Enable for artifact-based deployments (zip deploy).'
         type: boolean
@@ -34,11 +52,11 @@ on:
         default: ''
     secrets:
       AZURE_CLIENT_ID:
-        required: false
+        required: true
       AZURE_TENANT_ID:
-        required: false
+        required: true
       AZURE_SUBSCRIPTION_ID:
-        required: false
+        required: true
       AZURE_CLIENT_SECRET:
         required: false
     outputs:
@@ -48,6 +66,9 @@ on:
       environment:
         description: 'Resolved target environment.'
         value: ${{ jobs.resolve.outputs.environment }}
+      image-uri:
+        description: 'Full Docker image URI.'
+        value: ${{ jobs.docker.outputs.image-uri }}
       should-deploy:
         description: 'Whether this build should trigger a deployment.'
         value: ${{ jobs.resolve.outputs.should-deploy }}
@@ -99,3 +120,35 @@ jobs:
           configuration: ${{ inputs.configuration }}
           publish-artifacts: ${{ inputs.publish-artifacts }}
           artifact-name: build-output
+
+  docker:
+    name: Docker Build & Push
+    needs: [resolve, build-test]
+    if: needs.resolve.outputs.should-deploy == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      image-uri: ${{ steps.build-push.outputs.image-uri }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Build and push
+        id: build-push
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/docker-build-push@v1
+        with:
+          registry: ${{ inputs.acr-registry }}
+          image-name: ${{ inputs.image-name }}
+          image-tag: ${{ needs.resolve.outputs.version }}
+          dockerfile: ${{ inputs.dockerfile }}
+          artifact-name: build-output
+          dotnet-version: ${{ inputs.dotnet-version }}
+          entry-point-dll: ${{ inputs.entry-point-dll }}
+          push: 'true'

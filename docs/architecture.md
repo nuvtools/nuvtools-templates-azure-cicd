@@ -9,7 +9,20 @@
 
 ## Pipeline Flow
 
-### CI Pipeline (`ci.yml`)
+### CI Pipeline (`ci.yml`) — Artifact-based
+
+```
+┌──────────┐     ┌─────────────┐
+│ resolve   │     │ build-test  │
+│ (version) │     │ (.NET)      │
+└───────────┘     └─────────────┘
+```
+
+- **resolve** and **build-test** run in parallel
+- No Docker job — used by App Service (zip deploy) consumers
+- Outputs semantic environment names (`staging`, `production`) from `resolve-version`
+
+### CI Pipeline (`ci-docker.yml`) — Container-based
 
 ```
 ┌──────────┐     ┌─────────────┐
@@ -22,13 +35,13 @@
         ┌──────────────┐
         │ docker       │
         │ (build+push) │
-        │ [conditional]│
         └──────────────┘
 ```
 
 - **resolve** and **build-test** run in parallel
-- **docker** depends on both and only runs when `build-docker: true` AND `should-deploy: true`
-- PR builds skip the docker job entirely
+- **docker** depends on both and only runs when `should-deploy: true`
+- Used by AKS (Helm) and App Service (Docker) consumers
+- Also outputs semantic environment names from `resolve-version`
 
 ### CD Pipeline (AKS)
 

@@ -13,12 +13,11 @@ on:
 
 jobs:
   ci:
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci-docker.yml@v1
     with:
       dotnet-version: '10.0.x'
       project-path: 'src/MyApp.API/MyApp.API.csproj'
       test-path: 'tests/MyApp.UnitTests/MyApp.UnitTests.csproj'
-      build-docker: true
       acr-registry: myregistry.azurecr.io
       image-name: my-app-api
       entry-point-dll: MyApp.API.dll
