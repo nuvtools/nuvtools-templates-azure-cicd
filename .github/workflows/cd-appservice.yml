@@ -154,15 +154,15 @@ jobs:
             --resource-group "$RG" \
             $SLOT_ARG \
             --settings @"$CONVERTED_PATH" \
-            --verbose 2>&1) || {
+            --debug 2>&1) || {
               echo "::endgroup::"
               echo "::error::Failed to apply app settings"
               echo "$OUTPUT"
 
-              # Check for ongoing operations on the resource
-              echo "::group::Checking ongoing operations"
-              az webapp show --name "$TARGET" --resource-group "$RG" --query "state" -o tsv
-              az group deployment list --resource-group "$RG" --filter "provisioningState eq 'Running'" -o table 2>/dev/null || true
+              # Check for resource locks and slot status
+              echo "::group::Checking resource locks and slot status"
+              az lock list --resource-group "$RG" -o table 2>/dev/null || true
+              az webapp deployment slot list --name "$TARGET" --resource-group "$RG" -o table 2>/dev/null || true
               echo "::endgroup::"
 
               exit 1
