@@ -138,44 +138,22 @@ jobs:
           CONVERTED_PATH="/tmp/app-settings-converted.json"
 
           if jq -e 'type == "array"' "$SETTINGS_PATH" > /dev/null 2>&1; then
-            echo "Detected JSON array format (legacy), using directly."
-            cp "$SETTINGS_PATH" "$CONVERTED_PATH"
+            echo "Detected JSON array format (legacy), converting to flat object."
+            jq 'map({(.name): .value}) | add' "$SETTINGS_PATH" > "$CONVERTED_PATH"
           else
-            echo "Detected YAML key-value format, converting to Azure CLI JSON array."
+            echo "Detected YAML key-value format, converting to flat JSON object."
             yq -o=json '.' "$SETTINGS_PATH" \
-              | jq '[to_entries[] | {name: .key, value: (.value | tostring), slotSetting: false}]' \
+              | jq 'with_entries(.value |= tostring)' \
               > "$CONVERTED_PATH"
           fi
 
           echo "::group::Applying app settings"
 
-          MAX_ATTEMPTS=5
-          DELAY=10
-          ATTEMPT=1
-
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS: applying app settings..."
-
-            if az webapp config appsettings set \
-              --name "$TARGET" \
-              --resource-group "$RG" \
-              $SLOT_ARG \
-              --settings @"$CONVERTED_PATH"; then
-              echo "App settings applied successfully on attempt $ATTEMPT."
-              break
-            fi
-
-            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-              echo "::error::Failed to apply app settings after $MAX_ATTEMPTS attempts."
-              echo "::endgroup::"
-              exit 1
-            fi
-
-            echo "::warning::Attempt $ATTEMPT failed. Retrying in ${DELAY}s..."
-            sleep $DELAY
-            DELAY=$((DELAY * 2))
-            ATTEMPT=$((ATTEMPT + 1))
-          done
+          az webapp config appsettings set \
+            --name "$TARGET" \
+            --resource-group "$RG" \
+            $SLOT_ARG \
+            --settings @"$CONVERTED_PATH"
 
           echo "::endgroup::"
 
