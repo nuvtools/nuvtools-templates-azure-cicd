@@ -54,6 +54,11 @@ on:
         type: string
         required: false
         default: ''
+      deploy-timeout:
+        description: 'Timeout in seconds for the deployment operation (zip upload + extraction).'
+        type: number
+        required: false
+        default: 600
       config-repo-ref:
         description: 'Git ref for the config repository.'
         type: string
@@ -181,7 +186,8 @@ jobs:
             --resource-group "${{ inputs.resource-group }}" \
             --slot "${{ inputs.slot-name }}" \
             --type zip \
-            --src-path ./app-package.zip
+            --src-path ./app-package.zip \
+            --timeout ${{ inputs.deploy-timeout }}
 
       - name: Deploy artifact (direct)
         if: inputs.deploy-mode == 'artifact' && !inputs.use-deployment-slot
@@ -191,7 +197,8 @@ jobs:
             --name "${{ inputs.app-service-name }}" \
             --resource-group "${{ inputs.resource-group }}" \
             --type zip \
-            --src-path ./app-package.zip
+            --src-path ./app-package.zip \
+            --timeout ${{ inputs.deploy-timeout }}
 
       # --- Deploy: Docker to slot or direct ---
       - name: Deploy docker to slot
