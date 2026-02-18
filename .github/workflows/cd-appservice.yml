@@ -149,12 +149,26 @@ jobs:
 
           echo "::group::Applying app settings"
 
-          az webapp config appsettings set \
+          OUTPUT=$(az webapp config appsettings set \
             --name "$TARGET" \
             --resource-group "$RG" \
             $SLOT_ARG \
-            --settings @"$CONVERTED_PATH"
+            --settings @"$CONVERTED_PATH" \
+            --verbose 2>&1) || {
+              echo "::endgroup::"
+              echo "::error::Failed to apply app settings"
+              echo "$OUTPUT"
 
+              # Check for ongoing operations on the resource
+              echo "::group::Checking ongoing operations"
+              az webapp show --name "$TARGET" --resource-group "$RG" --query "state" -o tsv
+              az group deployment list --resource-group "$RG" --filter "provisioningState eq 'Running'" -o table 2>/dev/null || true
+              echo "::endgroup::"
+
+              exit 1
+          }
+
+          echo "$OUTPUT"
           echo "::endgroup::"
 
       # --- Deploy: Artifact to slot or direct ---
