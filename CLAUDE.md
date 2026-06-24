@@ -20,31 +20,28 @@ There are no unit tests. Integration testing is done by referencing a fork branc
 
 ### Reusable Workflows (`.github/workflows/`)
 
-- **ci.yml** — CI pipeline: version resolution, .NET build/test/coverage, Docker build & push to ACR
+- **ci.yml** — CI pipeline (artifact): .NET build/test/coverage, publishes build artifacts; outputs `version`
+- **ci-docker.yml** — CI pipeline (container): .NET build/test/coverage, Docker build & push to ACR; outputs `version` and `image-uri`
 - **cd-aks.yml** — CD to AKS: Helm-based deployment with placeholder substitution, optional GitOps config repo
 - **cd-appservice.yml** — CD to App Service: zip deploy or Docker container deploy, optional slot swap
 
 ### Composite Actions (`.github/actions/`)
 
-Five building blocks that workflows compose together:
+Four building blocks that workflows compose together:
 
 | Action | Role |
 |---|---|
-| `resolve-version` | Maps git refs to version strings and environment names |
 | `azure-login` | OIDC auth (preferred) with Service Principal fallback |
 | `dotnet-build-test` | Restore, build, test, coverage report, publish, artifact upload |
 | `docker-build-push` | Build Docker image and push to ACR |
 | `helm-deploy` | Chart prep, placeholder substitution, Helm upgrade, rollout verify |
 
-### Version Resolution Strategy
+### Environment Selection Strategy
 
-Central to the pipeline — `resolve-version` maps git events to versions and environments:
+Pipelines run on manual `workflow_dispatch`. The operator picks the target environment from a `choice` dropdown input, and a `runDeploy` boolean gates the deploy job. There is no automatic environment inference from git refs (the old `resolve-version` action and its tag/branch/PR mapping were removed).
 
-- `refs/heads/main|master` → `dev{run_number}` → environment `dev`
-- `refs/tags/v*-alpha|beta|rc` → semver (no `v` prefix) → environment `staging`
-- `refs/tags/v*` (stable) → semver (no `v` prefix) → environment `production`
-- `refs/pull/*` → `pr{number}-{sha7}` → CI only (no deploy)
-- Other branches → `{branch-slug}-{sha7}` → CI only (no deploy)
+- The `environment` input maps to a GitHub Environment, so approval gates and environment secrets apply to the deploy job.
+- The CI workflows derive the version/image tag from an optional input (`app-version` / `image-tag`), defaulting to `${{ github.run_number }}`.
 
 ### Helm Chart (`charts/default/`)
 

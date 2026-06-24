@@ -12,36 +12,33 @@
 ### CI Pipeline (`ci.yml`) — Artifact-based
 
 ```
-┌──────────┐     ┌─────────────┐
-│ resolve   │     │ build-test  │
-│ (version) │     │ (.NET)      │
-└───────────┘     └─────────────┘
+┌─────────────┐
+│ build-test  │
+│ (.NET)      │
+└─────────────┘
 ```
 
-- **resolve** and **build-test** run in parallel
+- Single **build-test** job: restore, build, test, coverage, publish artifacts
 - No Docker job — used by App Service (zip deploy) consumers
-- Outputs semantic environment names (`staging`, `production`) from `resolve-version`
+- Outputs `version` (from the `app-version` input, defaulting to the run number)
 
 ### CI Pipeline (`ci-docker.yml`) — Container-based
 
 ```
-┌──────────┐     ┌─────────────┐
-│ resolve   │     │ build-test  │
-│ (version) │     │ (.NET)      │
-└─────┬─────┘     └──────┬──────┘
-      │                  │
-      └────────┬─────────┘
-               ▼
-        ┌──────────────┐
-        │ docker       │
-        │ (build+push) │
-        └──────────────┘
+┌─────────────┐
+│ build-test  │
+│ (.NET)      │
+└──────┬──────┘
+       ▼
+┌──────────────┐
+│ docker       │
+│ (build+push) │
+└──────────────┘
 ```
 
-- **resolve** and **build-test** run in parallel
-- **docker** depends on both and only runs when `should-deploy: true`
+- **docker** depends on **build-test** and always runs (push is controlled by the `push` input)
 - Used by AKS (Helm) and App Service (Docker) consumers
-- Also outputs semantic environment names from `resolve-version`
+- Outputs `version` (image tag, from the `image-tag` input defaulting to the run number) and `image-uri`
 
 ### CD Pipeline (AKS)
 
@@ -93,20 +90,17 @@
 └──────────────────┘
 ```
 
-## Version Resolution Strategy
+## Environment Selection and Versioning
 
-The `resolve-version` action centralizes all version/environment logic:
+Pipelines run on manual `workflow_dispatch`. The operator chooses the target environment from a `choice` dropdown, and a `runDeploy` boolean gates the deploy job:
 
 ```
-git ref
-  ├── refs/heads/main|master  →  dev{run_number}      → dev
-  ├── refs/tags/v*-alpha*     →  semver (strip v)      → staging
-  ├── refs/tags/v*-beta*      →  semver (strip v)      → staging
-  ├── refs/tags/v*-rc*        →  semver (strip v)      → staging
-  ├── refs/tags/v*            →  semver (strip v)      → production
-  ├── refs/pull/*             →  pr{number}-{sha7}     → (none)
-  └── refs/heads/*            →  {branch-slug}-{sha7}  → (none)
+workflow_dispatch
+  ├── environment: dev | staging | production   → maps to a GitHub Environment
+  └── runDeploy: true | false                    → gates the deploy job (if: inputs.runDeploy)
 ```
+
+There is no automatic environment inference from git refs. The CI workflows derive the version (and image tag) from an optional input (`app-version` for `ci.yml`, `image-tag` for `ci-docker.yml`), defaulting to `${{ github.run_number }}`.
 
 This replaces the scattered version logic that was spread across multiple stages in the Azure DevOps pipeline.
 
@@ -175,6 +169,7 @@ For sensitive values, use Kubernetes Secrets (not managed by this chart — use 
 - Uses GitHub's built-in OIDC token provider
 - Requires federated credentials on the Azure AD app registration
 - The calling workflow must set `permissions: id-token: write`
+- `cd-appservice.yml` accepts the client/tenant/subscription IDs as optional non-secret inputs (`client-id`, `tenant-id`, `subscription-id`); when empty it falls back to the `AZURE_*` secrets
 
 ### Service Principal Fallback
 
@@ -187,7 +182,7 @@ For sensitive values, use Kubernetes Secrets (not managed by this chart — use 
 | Aspect | Azure DevOps (old) | GitHub Actions (new) |
 |---|---|---|
 | Pipeline definition | YAML template + config repos | Reusable workflows + composite actions |
-| Version resolution | Scattered across stages | Centralized `resolve-version` action |
+| Environment selection | Scattered across stages | Manual `workflow_dispatch` dropdown |
 | Auth | Service connections | OIDC federated credentials |
 | Approval gates | Stage gates | GitHub Environments |
 | Artifact transfer | 7z archive between stages | GitHub Artifacts (built-in compression) |

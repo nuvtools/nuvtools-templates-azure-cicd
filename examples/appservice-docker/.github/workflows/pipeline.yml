@@ -1,19 +1,33 @@
 name: Build & Deploy App Service Docker
-run-name: Build & Deploy App Service Docker 🚀 ${{ github.ref_name }}
+run-name: Build & Deploy App Service Docker 🚀 ${{ inputs.environment }}
+
+# Example: .NET API deployed to Azure App Service via a Docker container.
+# Manual dispatch only — pick the target environment from the dropdown.
+# Uses ACR for image storage; production uses a deployment slot with swap.
 
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+        default: dev
+      runDeploy:
+        description: 'Deploy after build (uncheck for build + test only)'
+        type: boolean
+        default: true
 
-# Example: .NET API deployed to Azure App Service via Docker container
-# Uses ACR for image storage and deployment slots in production
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   ci:
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci-docker.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci-docker.yml@main
     with:
       dotnet-version: '10.0.x'
       project-path: 'src/MyApp.API/MyApp.API.csproj'
@@ -26,56 +40,20 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  # Deploy to dev (automatic on push to main)
-  deploy-dev:
+  deploy:
     needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'dev'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
+    if: inputs.runDeploy
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@main
     with:
-      environment: dev
+      environment: ${{ inputs.environment }}
       app-version: ${{ needs.ci.outputs.version }}
       deploy-mode: docker
-      app-service-name: my-app-dev
-      resource-group: rg-dev
+      app-service-name: my-app-${{ inputs.environment }}
+      resource-group: rg-${{ inputs.environment }}
       image-uri: ${{ needs.ci.outputs.image-uri }}
-      app-settings-file: app-settings-dev.yml
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-  # Deploy to staging (prerelease tags: v*-alpha*, v*-beta*, v*-rc*)
-  deploy-staging:
-    needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'staging'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
-    with:
-      environment: staging
-      app-version: ${{ needs.ci.outputs.version }}
-      deploy-mode: docker
-      app-service-name: my-app-staging
-      resource-group: rg-staging
-      image-uri: ${{ needs.ci.outputs.image-uri }}
-      app-settings-file: app-settings-staging.yml
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-  # Deploy to production with slot swap (release tags: v*)
-  deploy-production:
-    needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'production'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
-    with:
-      environment: production
-      app-version: ${{ needs.ci.outputs.version }}
-      deploy-mode: docker
-      app-service-name: my-app-prod
-      resource-group: rg-production
-      image-uri: ${{ needs.ci.outputs.image-uri }}
-      app-settings-file: app-settings-production.yml
-      use-deployment-slot: true
+      app-settings-file: app-settings-${{ inputs.environment }}.yml
+      # Zero-downtime slot swap in production only.
+      use-deployment-slot: ${{ inputs.environment == 'production' }}
       slot-name: staging
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}

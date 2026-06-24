@@ -1,5 +1,9 @@
 name: CI
 
+# Build, test and publish a .NET project. Tag-driven version/environment
+# resolution has been removed: the calling workflow chooses the environment
+# explicitly (e.g. a workflow_dispatch dropdown) and passes app-version in.
+
 on:
   workflow_call:
     inputs:
@@ -9,7 +13,7 @@ on:
         required: false
         default: '10.0.x'
       project-path:
-        description: 'Path to the solution or project file.'
+        description: 'Path to the solution or project file to build. Use the solution when tests live outside the host project.'
         type: string
         required: true
       test-path:
@@ -32,71 +36,40 @@ on:
         type: string
         required: false
         default: ''
-      environment-override:
-        description: 'Override the auto-detected environment name (e.g., dev, uat, staging, production).'
+      app-version:
+        description: 'Application version label (used for logs/summary). Defaults to the run number.'
         type: string
         required: false
         default: ''
-    secrets:
-      AZURE_CLIENT_ID:
-        required: false
-      AZURE_TENANT_ID:
-        required: false
-      AZURE_SUBSCRIPTION_ID:
-        required: false
-      AZURE_CLIENT_SECRET:
-        required: false
     outputs:
       version:
-        description: 'Resolved version/image tag.'
-        value: ${{ jobs.resolve.outputs.version }}
-      environment:
-        description: 'Resolved target environment.'
-        value: ${{ jobs.resolve.outputs.environment }}
-      should-deploy:
-        description: 'Whether this build should trigger a deployment.'
-        value: ${{ jobs.resolve.outputs.should-deploy }}
+        description: 'Resolved version label.'
+        value: ${{ jobs.build-test.outputs.version }}
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  resolve:
-    name: Resolve Version
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      environment: ${{ steps.env-resolve.outputs.environment }}
-      is-release: ${{ steps.version.outputs.is-release }}
-      is-prerelease: ${{ steps.version.outputs.is-prerelease }}
-      should-deploy: ${{ steps.version.outputs.should-deploy }}
-    steps:
-      - name: Resolve version
-        id: version
-        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/resolve-version@v1
-        with:
-          run-number: ${{ github.run_number }}
-
-      - name: Apply environment override
-        id: env-resolve
-        shell: bash
-        run: |
-          if [ -n "${{ inputs.environment-override }}" ]; then
-            echo "environment=${{ inputs.environment-override }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "environment=${{ steps.version.outputs.environment }}" >> "$GITHUB_OUTPUT"
-          fi
-
   build-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
+      - name: Resolve version label
+        id: version
+        shell: bash
+        run: |
+          VERSION="${{ inputs.app-version }}"
+          [ -z "$VERSION" ] && VERSION="${{ github.run_number }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build and test
-        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/dotnet-build-test@v1
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/dotnet-build-test@main
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           project-path: ${{ inputs.project-path }}

@@ -9,7 +9,7 @@ Reusable GitHub Actions workflows and composite actions for deploying .NET appli
 | **CI Pipeline** | Build, test, coverage, Docker build & push — all in one reusable workflow |
 | **CD for AKS** | Helm-based deployments to Azure Kubernetes Service |
 | **CD for App Service** | Zip deploy or container image deploy with optional slot swaps |
-| **Version Resolution** | Automatic environment detection from git refs (branches, tags, PRs) |
+| **Manual Dispatch** | Operator picks the target environment from a `workflow_dispatch` dropdown |
 | **Azure Auth** | OIDC (recommended) with Service Principal fallback |
 | **GitOps Support** | Optional config repo pattern for Helm values per environment |
 | **Default Helm Chart** | Generic chart with ConfigMap env var injection, health checks, HPA |
@@ -32,20 +32,32 @@ Set up OIDC federated credentials (see [Authentication Setup](docs/authenticatio
 name: Pipeline
 
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+        default: dev
+      runDeploy:
+        description: 'Deploy after build (uncheck for build + test only)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   ci:
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci-docker.yml@main
     with:
       dotnet-version: '10.0.x'
       project-path: 'src/MyApp/MyApp.csproj'
       test-path: 'tests/MyApp.Tests/MyApp.Tests.csproj'
-      build-docker: true
       acr-registry: myregistry.azurecr.io
       image-name: my-app
       entry-point-dll: MyApp.dll
@@ -56,48 +68,41 @@ jobs:
 
   deploy:
     needs: ci
-    if: needs.ci.outputs.should-deploy == 'true'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@v1
+    if: inputs.runDeploy
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@main
     with:
-      environment: ${{ needs.ci.outputs.environment }}
+      environment: ${{ inputs.environment }}
       image-uri: ${{ needs.ci.outputs.image-uri }}
       app-version: ${{ needs.ci.outputs.version }}
       aks-cluster-name: my-cluster
       aks-resource-group: my-rg
       namespace: my-app
       release-name: my-app
-      values-file: helm-values-${{ needs.ci.outputs.environment }}.yml
+      values-file: helm-values-${{ inputs.environment }}.yml
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 ```
 
-### 3. Push and Deploy
+### 3. Dispatch and Deploy
 
-| Action | Result |
+Pipelines run on manual `workflow_dispatch`. From the **Actions** tab, run the workflow and pick the target environment from the dropdown:
+
+| Dispatch input | Result |
 |---|---|
-| Push to `main` | Build + deploy to **dev** |
-| Tag `v1.0.0-rc.1` | Build + deploy to **staging** |
-| Tag `v1.0.0` | Build + deploy to **production** |
-| Pull request | Build + test only (no deploy) |
+| `environment: dev`, `runDeploy: true` | Build + deploy to **dev** |
+| `environment: staging`, `runDeploy: true` | Build + deploy to **staging** |
+| `environment: production`, `runDeploy: true` | Build + deploy to **production** |
+| `runDeploy: false` | Build + test only (no deploy) |
 
-## Version Resolution
-
-The `resolve-version` action maps git events to versions and environments:
-
-| Git Event | Image Tag | Environment |
-|---|---|---|
-| Push to `main`/`master` | `dev{run_number}` | `dev` |
-| Tag `v*-alpha*`/`v*-beta*`/`v*-rc*` | SemVer (strip `v`) | `staging` |
-| Tag `v*` (stable) | SemVer (strip `v`) | `production` |
-| Pull request | `pr{number}-{sha7}` | _(none — CI only)_ |
+The selected `environment` maps to a GitHub Environment, so approval gates and environment secrets apply automatically.
 
 ## Workflow Reference
 
-### `ci.yml` — Continuous Integration
+### `ci.yml` — Continuous Integration (artifact)
 
-Reusable workflow that runs build, test, and optionally Docker build + push.
+Reusable workflow that runs build, test, coverage, and publishes build artifacts (for zip-deploy consumers). No Docker job.
 
 <details>
 <summary>Inputs</summary>
@@ -106,14 +111,11 @@ Reusable workflow that runs build, test, and optionally Docker build + push.
 |---|---|---|---|
 | `dotnet-version` | No | `10.0.x` | .NET SDK version |
 | `project-path` | **Yes** | — | Solution or project path |
-| `test-path` | No | `''` | Test project path |
+| `test-path` | No | `''` | Test project path (empty skips tests) |
 | `configuration` | No | `Release` | Build configuration |
-| `build-docker` | No | `true` | Build and push Docker image |
-| `acr-registry` | No | `''` | ACR registry (e.g., `myacr.azurecr.io`) |
-| `image-name` | No | `''` | Docker image name |
-| `dockerfile` | No | `''` | Custom Dockerfile path |
-| `entry-point-dll` | No | `''` | .NET DLL entry point |
-| `environment-override` | No | `''` | Override auto-detected environment |
+| `publish-artifacts` | No | `true` | Publish build artifacts |
+| `publish-path` | No | `''` | Project to publish (defaults to `project-path`) |
+| `app-version` | No | `''` | Version label for logs/summary (defaults to `${{ github.run_number }}`) |
 
 </details>
 
@@ -122,10 +124,40 @@ Reusable workflow that runs build, test, and optionally Docker build + push.
 
 | Output | Description |
 |---|---|
-| `version` | Resolved version/tag |
-| `environment` | Target environment |
+| `version` | Resolved version label |
+
+</details>
+
+### `ci-docker.yml` — Continuous Integration (container)
+
+Reusable workflow that runs build, test, coverage, and builds + pushes a container image to ACR.
+
+<details>
+<summary>Inputs</summary>
+
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `dotnet-version` | No | `10.0.x` | .NET SDK version |
+| `project-path` | **Yes** | — | Solution or project path |
+| `test-path` | No | `''` | Test project path (empty skips tests) |
+| `configuration` | No | `Release` | Build configuration |
+| `acr-registry` | **Yes** | — | ACR registry (e.g., `myacr.azurecr.io`) |
+| `image-name` | **Yes** | — | Docker image name |
+| `image-tag` | No | `''` | Image tag (defaults to `${{ github.run_number }}`) |
+| `dockerfile` | No | `''` | Custom Dockerfile path |
+| `entry-point-dll` | No | `''` | .NET DLL entry point (default Dockerfile) |
+| `publish-artifacts` | No | `true` | Publish build artifacts |
+| `push` | No | `true` | Whether to push the image to the registry |
+
+</details>
+
+<details>
+<summary>Outputs</summary>
+
+| Output | Description |
+|---|---|
+| `version` | Resolved image tag |
 | `image-uri` | Full Docker image URI |
-| `should-deploy` | Whether to deploy |
 
 </details>
 
@@ -173,11 +205,16 @@ Deploys to Azure App Service via zip deploy or container image.
 | `slot-name` | No | `staging` | Deployment slot name |
 | `artifact-name` | No | `build-output` | Build artifact name |
 | `image-uri` | No | `''` | Container image URI |
-| `app-settings-file` | No | `''` | JSON app settings file |
+| `app-settings-file` | No | `''` | YAML app settings file |
 | `config-repo` | No | `''` | GitOps config repo |
 | `config-repo-ref` | No | `main` | Config repo ref |
+| `client-id` | No | `''` | Azure AD client ID for OIDC (falls back to `AZURE_CLIENT_ID` secret) |
+| `tenant-id` | No | `''` | Azure AD tenant ID for OIDC (falls back to `AZURE_TENANT_ID` secret) |
+| `subscription-id` | No | `''` | Azure subscription ID for OIDC (falls back to `AZURE_SUBSCRIPTION_ID` secret) |
 
 </details>
+
+The `client-id`, `tenant-id`, and `subscription-id` inputs are non-secret Azure OIDC identifiers. Pass them from a non-secret source (e.g. a `bicepparam`) to avoid configuring repository secrets. When left empty, the workflow falls back to the matching `AZURE_*` secrets.
 
 ## Composite Actions
 
@@ -186,12 +223,11 @@ Individual actions can be used standalone:
 | Action | Description |
 |---|---|
 | `azure-login` | Azure auth with OIDC/SP auto-detection |
-| `resolve-version` | Version and environment resolution |
 | `dotnet-build-test` | .NET build, test, coverage, artifacts |
 | `docker-build-push` | Docker build and ACR push |
 | `helm-deploy` | AKS credentials + Helm upgrade |
 
-Usage: `uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/<action-name>@v1`
+Usage: `uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/<action-name>@main`
 
 ## Examples
 

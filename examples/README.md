@@ -48,11 +48,11 @@ All examples share the same prerequisites:
 
 ## Orchestration Flow
 
-All examples follow the same version resolution strategy:
+All examples run on manual `workflow_dispatch`. Run the workflow from the **Actions** tab and pick the target environment from the dropdown:
 
-| Git Event | Version | Environment | Action |
+| Dispatch input | Version | Environment | Action |
 |---|---|---|---|
-| Push to `main` | `dev{run_number}` | `dev` | Build + deploy |
-| Tag `v*-alpha*`/`v*-beta*`/`v*-rc*` | SemVer | `staging` | Build + deploy |
-| Tag `v*` (stable) | SemVer | `production` | Build + deploy |
-| Pull request | `pr{number}-{sha7}` | — | Build + test only |
+| `environment: dev`, `runDeploy: true` | run number | `dev` | Build + deploy |
+| `environment: staging`, `runDeploy: true` | run number | `staging` | Build + deploy |
+| `environment: production`, `runDeploy: true` | run number | `production` | Build + deploy |
+| `runDeploy: false` | run number | — | Build + test only |

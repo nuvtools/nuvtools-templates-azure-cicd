@@ -1,19 +1,33 @@
 name: Build & Deploy AKS
-run-name: Build & Deploy AKS 🚀 ${{ github.ref_name }}
+run-name: Build & Deploy AKS 🚀 ${{ inputs.environment }}
+
+# Full example: .NET API deployed to AKS via Helm.
+# Manual dispatch only — pick the target environment from the dropdown.
+# Per-environment Helm values live in the application repo.
 
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+        default: dev
+      runDeploy:
+        description: 'Deploy after build (uncheck for build + test only)'
+        type: boolean
+        default: true
 
-# Full example: .NET API deployed to AKS via Helm
-# Uses per-environment Helm values stored in the application repo
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   ci:
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci-docker.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci-docker.yml@main
     with:
       dotnet-version: '10.0.x'
       project-path: 'src/MyApp.API/MyApp.API.csproj'
@@ -26,61 +40,20 @@ jobs:
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  # Deploy to dev (automatic on push to main)
-  deploy-dev:
+  deploy:
     needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'dev'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@v1
+    if: inputs.runDeploy
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@main
     with:
-      environment: dev
+      environment: ${{ inputs.environment }}
       image-uri: ${{ needs.ci.outputs.image-uri }}
       app-version: ${{ needs.ci.outputs.version }}
-      aks-cluster-name: my-aks-dev
-      aks-resource-group: rg-dev
+      aks-cluster-name: my-aks-${{ inputs.environment }}
+      aks-resource-group: rg-${{ inputs.environment }}
       namespace: my-app
       release-name: my-app-api
-      values-file: helm-values-dev.yml
-      env-values-file: env-values-dev.yml
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-  # Deploy to staging (prerelease tags: v*-alpha*, v*-beta*, v*-rc*)
-  deploy-staging:
-    needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'staging'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@v1
-    with:
-      environment: staging
-      image-uri: ${{ needs.ci.outputs.image-uri }}
-      app-version: ${{ needs.ci.outputs.version }}
-      aks-cluster-name: my-aks-staging
-      aks-resource-group: rg-staging
-      namespace: my-app
-      release-name: my-app-api
-      values-file: helm-values-staging.yml
-      env-values-file: env-values-staging.yml
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-  # Deploy to production (release tags: v*)
-  deploy-production:
-    needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'production'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-aks.yml@v1
-    with:
-      environment: production
-      image-uri: ${{ needs.ci.outputs.image-uri }}
-      app-version: ${{ needs.ci.outputs.version }}
-      aks-cluster-name: my-aks-prod
-      aks-resource-group: rg-production
-      namespace: my-app
-      release-name: my-app-api
-      values-file: helm-values-production.yml
-      env-values-file: env-values-production.yml
+      values-file: helm-values-${{ inputs.environment }}.yml
+      env-values-file: env-values-${{ inputs.environment }}.yml
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

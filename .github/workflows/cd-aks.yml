@@ -100,7 +100,7 @@ jobs:
           path: config-repo
 
       - name: Azure login
-        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@v1
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@main
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -112,7 +112,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: nuvtools/nuvtools-templates-azure-cicd
-          ref: v1
+          ref: main
           path: nuvtools-pipelines
           sparse-checkout: charts/default
 
@@ -141,7 +141,7 @@ jobs:
           fi
 
       - name: Helm deploy
-        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/helm-deploy@v1
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/helm-deploy@main
         with:
           aks-cluster-name: ${{ inputs.aks-cluster-name }}
           aks-resource-group: ${{ inputs.aks-resource-group }}

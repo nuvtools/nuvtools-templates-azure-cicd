@@ -31,19 +31,11 @@ See [Authentication Setup](authentication-setup.md) for detailed instructions.
 ```bash
 APP_ID="<your-app-id>"
 
-# Create federated credential for the main branch
+# Create federated credential for the CI job (the branch you dispatch from)
 az ad app federated-credential create --id $APP_ID --parameters '{
   "name": "github-main",
   "issuer": "https://token.actions.githubusercontent.com",
   "subject": "repo:<owner>/<repo>:ref:refs/heads/main",
-  "audiences": ["api://AzureADTokenExchange"]
-}'
-
-# Create federated credential for tags
-az ad app federated-credential create --id $APP_ID --parameters '{
-  "name": "github-tags",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:<owner>/<repo>:ref:refs/tags/*",
   "audiences": ["api://AzureADTokenExchange"]
 }'
 
@@ -104,9 +96,9 @@ Go to **Settings > Secrets and variables > Actions** and add:
 
 Go to **Settings > Environments** and create:
 
-1. **dev** — No protection rules (auto-deploy)
+1. **dev** — No protection rules
 2. **staging** — Optional: required reviewers
-3. **production** — Required reviewers, deployment branch rules (tags only)
+3. **production** — Required reviewers (approval gate before the deploy job runs)
 
 ## Step 5: Create Your Pipeline
 
@@ -121,7 +113,7 @@ Customize:
 3. Set your cluster/App Service names and resource groups per environment
 4. Create Helm values files for each environment (AKS only)
 
-## Step 6: Push and Verify
+## Step 6: Commit and Run
 
 ```bash
 git add .github/workflows/pipeline.yml
@@ -129,7 +121,7 @@ git commit -m "ci: add NuvTools pipeline"
 git push origin main
 ```
 
-Check the **Actions** tab in GitHub to verify the pipeline runs successfully.
+The pipeline runs on manual dispatch. In the **Actions** tab, select your workflow, click **Run workflow**, pick the target **environment** from the dropdown (and leave **runDeploy** checked to deploy), then verify the run completes successfully.
 
 ## Next Steps
 

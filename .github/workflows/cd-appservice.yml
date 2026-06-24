@@ -64,13 +64,28 @@ on:
         type: string
         required: false
         default: 'main'
+      client-id:
+        description: 'Azure AD client ID for OIDC login. These are non-secret identifiers; pass them as inputs (e.g. read from a bicepparam) to avoid configuring repo secrets. Falls back to the AZURE_CLIENT_ID secret when empty.'
+        type: string
+        required: false
+        default: ''
+      tenant-id:
+        description: 'Azure AD tenant ID for OIDC login. Falls back to the AZURE_TENANT_ID secret when empty.'
+        type: string
+        required: false
+        default: ''
+      subscription-id:
+        description: 'Azure subscription ID for OIDC login. Falls back to the AZURE_SUBSCRIPTION_ID secret when empty.'
+        type: string
+        required: false
+        default: ''
     secrets:
       AZURE_CLIENT_ID:
-        required: true
+        required: false
       AZURE_TENANT_ID:
-        required: true
+        required: false
       AZURE_SUBSCRIPTION_ID:
-        required: true
+        required: false
       AZURE_CLIENT_SECRET:
         required: false
       CONFIG_REPO_TOKEN:
@@ -99,11 +114,11 @@ jobs:
           path: config-repo
 
       - name: Azure login
-        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@v1
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@main
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ inputs.client-id != '' && inputs.client-id || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ inputs.tenant-id != '' && inputs.tenant-id || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ inputs.subscription-id != '' && inputs.subscription-id || secrets.AZURE_SUBSCRIPTION_ID }}
           client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
 
       # --- Artifact mode (zip deploy) ---
