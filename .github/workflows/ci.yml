@@ -27,6 +27,11 @@ on:
         type: boolean
         required: false
         default: true
+      publish-path:
+        description: 'Path to the project to publish. Defaults to project-path. Use a specific .csproj when project-path is a solution to avoid mixed outputs.'
+        type: string
+        required: false
+        default: ''
       environment-override:
         description: 'Override the auto-detected environment name (e.g., dev, uat, staging, production).'
         type: string
@@ -98,4 +103,5 @@ jobs:
           test-path: ${{ inputs.test-path }}
           configuration: ${{ inputs.configuration }}
           publish-artifacts: ${{ inputs.publish-artifacts }}
+          publish-path: ${{ inputs.publish-path }}
           artifact-name: build-output

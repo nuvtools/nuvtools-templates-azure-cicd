@@ -21,6 +21,10 @@ inputs:
     description: 'Whether to publish build artifacts.'
     required: false
     default: 'true'
+  publish-path:
+    description: 'Path to the project to publish. Defaults to project-path. Use a specific .csproj when project-path is a solution to avoid mixed outputs.'
+    required: false
+    default: ''
   artifact-name:
     description: 'Name for the uploaded build artifact.'
     required: false
@@ -81,7 +85,8 @@ runs:
       if: inputs.publish-artifacts == 'true'
       shell: bash
       run: |
-        dotnet publish "${{ inputs.project-path }}" \
+        PUBLISH_TARGET="${{ inputs.publish-path || inputs.project-path }}"
+        dotnet publish "$PUBLISH_TARGET" \
           --configuration ${{ inputs.configuration }} \
           --no-build \
           --output ./publish
