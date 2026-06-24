@@ -6,7 +6,7 @@ Complete pipeline for deploying a .NET application to AKS with per-environment H
 
 - CI with build, test, Docker build and push to ACR
 - CD to AKS via Helm with per-environment values files
-- Automatic deployment to dev, staging and production based on git refs
+- Manual dispatch to dev, staging or production via the `environment` dropdown
 - Per-environment Helm values and env-values for ConfigMap injection
 
 ## Consumer Repository Structure
@@ -52,10 +52,11 @@ my-app/
 | `dotnet-version` | `10.0.x` | .NET SDK version |
 | `project-path` | `src/MyApp.API/MyApp.API.csproj` | Project path |
 | `test-path` | `tests/MyApp.UnitTests/MyApp.UnitTests.csproj` | Test project path |
-| `build-docker` | `true` | Enable Docker image build |
 | `acr-registry` | `myregistry.azurecr.io` | ACR registry |
 | `image-name` | `my-app-api` | Image name |
 | `entry-point-dll` | `MyApp.API.dll` | Entry point DLL |
+
+This example calls `ci-docker.yml` (build, test, Docker build and push).
 
 ## CD Parameters
 
@@ -73,12 +74,14 @@ my-app/
 
 ## Orchestration Flow
 
-| Action | Result |
+Run the workflow manually from the **Actions** tab and pick the target environment:
+
+| Dispatch input | Result |
 |---|---|
-| Push to `main` | Build + deploy to **dev** |
-| Tag `v1.0.0-rc.1` | Build + deploy to **staging** |
-| Tag `v1.0.0` | Build + deploy to **production** |
-| Pull request | Build + test only (no deploy) |
+| `environment: dev`, `runDeploy: true` | Build + deploy to **dev** |
+| `environment: staging`, `runDeploy: true` | Build + deploy to **staging** |
+| `environment: production`, `runDeploy: true` | Build + deploy to **production** |
+| `runDeploy: false` | Build + test only (no deploy) |
 
 ## Customization
 

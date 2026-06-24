@@ -7,7 +7,7 @@ Pipeline for deploying a .NET application to Azure App Service using artifact-ba
 - CI with build and test (no Docker build needed)
 - CD to App Service via zip deploy (artifact mode)
 - Per-environment app settings applied before each deployment
-- Automatic deployment to dev, staging and production
+- Manual dispatch to dev, staging or production via the `environment` dropdown
 - Deployment slots with swap in production for zero-downtime
 
 ## Consumer Repository Structure
@@ -51,7 +51,8 @@ my-app/
 | `dotnet-version` | `10.0.x` | .NET SDK version |
 | `project-path` | `src/MyApp.API/MyApp.API.csproj` | Project path |
 | `test-path` | `tests/MyApp.UnitTests/MyApp.UnitTests.csproj` | Test project path |
-| `build-docker` | `false` | Docker not needed for zip deploy |
+
+This example calls `ci.yml` (artifact-based, no Docker).
 
 ## CD Parameters
 
@@ -68,12 +69,14 @@ my-app/
 
 ## Orchestration Flow
 
-| Action | Result |
+Run the workflow manually from the **Actions** tab and pick the target environment:
+
+| Dispatch input | Result |
 |---|---|
-| Push to `main` | Build + deploy to **dev** |
-| Tag `v1.0.0-rc.1` | Build + deploy to **staging** |
-| Tag `v1.0.0` | Build + deploy to **production** (with slot swap) |
-| Pull request | Build + test only (no deploy) |
+| `environment: dev`, `runDeploy: true` | Build + deploy to **dev** |
+| `environment: staging`, `runDeploy: true` | Build + deploy to **staging** |
+| `environment: production`, `runDeploy: true` | Build + deploy to **production** (with slot swap) |
+| `runDeploy: false` | Build + test only (no deploy) |
 
 ## Customization
 

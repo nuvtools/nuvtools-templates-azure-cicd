@@ -6,18 +6,18 @@ NuvTools Pipelines supports two authentication methods for Azure. OIDC is recomm
 
 When a GitHub Actions job needs to access Azure, it requests a short-lived OIDC token from GitHub's token service. This token contains a **subject claim** — a string that identifies *what* triggered the job. Azure receives this token and checks if any federated credential on the App Registration has a matching subject. If a match is found, the job is authorized; if not, you get the `AADSTS70021: No matching federated identity record found` error.
 
-The subject claim format depends on the trigger type:
+The subject claim format depends on the job:
 
-| Trigger | Subject claim |
+| Job | Subject claim |
 |---|---|
-| Push to `main` | `repo:<owner>/<repo>:ref:refs/heads/main` |
-| Push tag `v1.0.0` | `repo:<owner>/<repo>:ref:refs/tags/v1.0.0` |
-| Pull request | `repo:<owner>/<repo>:pull_request` |
+| CI job (no `environment:`), dispatched from `main` | `repo:<owner>/<repo>:ref:refs/heads/main` |
 | Job with `environment: dev` | `repo:<owner>/<repo>:environment:dev` |
 
-> **Key insight:** when a job uses the `environment:` keyword, the subject claim **changes entirely** to `repo:<owner>/<repo>:environment:<name>` — regardless of what originally triggered the workflow (branch push, tag push, etc.). This means a deploy job triggered by a tag push does **not** use a tag-based subject; it uses an environment-based subject.
+Pipelines run on manual `workflow_dispatch` from a branch (the default branch in most cases), so the CI job sees the branch-based subject for the branch you dispatch from.
 
-This is why you typically need **two** federated credentials for a single trigger path: one for the CI job (which sees the original trigger subject) and one for the CD job (which sees the environment subject).
+> **Key insight:** when a job uses the `environment:` keyword, the subject claim **changes entirely** to `repo:<owner>/<repo>:environment:<name>` — regardless of which branch the workflow was dispatched from. The deploy job always uses an environment-based subject.
+
+This is why you typically need **two** federated credentials: one for the CI job (which sees the branch subject of the branch you dispatch from) and one for the CD job (which sees the environment subject).
 
 ## Option A: OIDC Federated Credentials (Recommended)
 
@@ -41,29 +41,27 @@ You need one credential per subject claim. The subject format depends on the tri
 
 #### Which credentials do I need?
 
-Use this table to determine which federated credentials your pipeline requires. Each row shows what happens when a specific trigger fires:
+Use this table to determine which federated credentials your pipeline requires. The CI job runs **without** the `environment:` keyword, so Azure sees the branch you dispatch from as the subject. The CD job (deploy) uses `environment:`, which **overrides** the subject to `environment:<name>`.
 
-| Trigger | CI job subject | Deploy job subject | Credentials needed |
+| Dispatch | CI job subject | Deploy job subject | Credentials needed |
 |---|---|---|---|
-| Push to `main` | `ref:refs/heads/main` | `environment:dev` | branch-main + env-dev |
-| Tag `v*-rc*` (prerelease) | `ref:refs/tags/*` | `environment:staging` | tags + env-staging |
-| Tag `v*` (stable release) | `ref:refs/tags/*` | `environment:production` | tags + env-production |
-| Pull request | `pull_request` | _(no deploy)_ | pr |
+| `environment: dev` | `ref:refs/heads/main` | `environment:dev` | branch-main + env-dev |
+| `environment: staging` | `ref:refs/heads/main` | `environment:staging` | branch-main + env-staging |
+| `environment: production` | `ref:refs/heads/main` | `environment:production` | branch-main + env-production |
+| `runDeploy: false` | `ref:refs/heads/main` | _(no deploy)_ | branch-main |
 
-The CI job (build, test, Docker push) runs **without** the `environment:` keyword, so Azure sees the original trigger as the subject. The CD job (deploy) uses `environment:`, which **overrides** the subject to `environment:<name>`.
+> **Note:** the CI job's subject is the branch you dispatch from (`main` in the examples above). If you dispatch from other branches, add a matching `branch-*` credential for each.
 
-> **Note:** if your pipeline does not deploy from `main` (e.g., only tags trigger deployments), you don't need the `environment:dev` credential — but you still need the `branch-main` credential so CI can push Docker images on `main` pushes.
+#### For the CI job (dispatch branch)
 
-#### For branch pushes (dev deployments)
-
-**When it fires:** a push to `main` triggers the CI workflow. The CI jobs (build, test, Docker push) run without `environment:`, so Azure sees the branch-based subject.
+**When it fires:** you manually dispatch the workflow from a branch. The CI job (build, test, Docker push) runs without `environment:`, so Azure sees the branch-based subject.
 
 **Subject claim:** `repo:<owner>/<repo>:ref:refs/heads/main`
 
 **Pipeline flow:**
 
 ```
-push to main
+dispatch (environment: dev)
   └─ ci (no environment:)                → subject: repo:…:ref:refs/heads/main  ← needs this credential
        └─ deploy-dev (environment: dev)  → subject: repo:…:environment:dev      ← needs env-dev credential
 ```
@@ -74,47 +72,17 @@ az ad app federated-credential create --id <app-id> --parameters '{
   "issuer": "https://token.actions.githubusercontent.com",
   "subject": "repo:<owner>/<repo>:ref:refs/heads/main",
   "audiences": ["api://AzureADTokenExchange"],
-  "description": "Deploy from main branch"
-}'
-```
-
-#### For tag pushes (staging/production deployments)
-
-**When it fires:** pushing a tag like `v1.0.0-rc.1` or `v1.0.0` triggers the CI workflow. The CI jobs (build, test, Docker push) run without `environment:`, so Azure sees the tag-based subject. The wildcard `*` matches any tag.
-
-**Subject claim:** `repo:<owner>/<repo>:ref:refs/tags/*` (wildcard matches all `v*` tags)
-
-**Pipeline flow:**
-
-```
-push tag v1.0.0-rc.1
-  └─ ci (no environment:)                     → subject: repo:…:ref:refs/tags/v1.0.0-rc.1  ← matched by tags credential
-       └─ deploy-staging (environment: staging) → subject: repo:…:environment:staging       ← needs env-staging credential
-
-push tag v1.0.0
-  └─ ci (no environment:)                          → subject: repo:…:ref:refs/tags/v1.0.0   ← matched by tags credential
-       └─ deploy-production (environment: production) → subject: repo:…:environment:production ← needs env-production credential
-```
-
-Notice how the CI job and the deploy job need **different** credentials: the CI job uses the tag subject while the deploy job switches to the environment subject.
-
-```bash
-az ad app federated-credential create --id <app-id> --parameters '{
-  "name": "github-tags",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:<owner>/<repo>:ref:refs/tags/*",
-  "audiences": ["api://AzureADTokenExchange"],
-  "description": "Deploy from tags"
+  "description": "CI dispatched from main branch"
 }'
 ```
 
 #### For GitHub Environments
 
-**When it fires:** the CD workflows (`cd-aks.yml`, `cd-appservice.yml`) use `environment: ${{ inputs.environment }}` on the deploy job. This **overrides** the OIDC subject claim to be environment-based, regardless of the original trigger (branch push, tag push, etc.).
+**When it fires:** the CD workflows (`cd-aks.yml`, `cd-appservice.yml`) use `environment: ${{ inputs.environment }}` on the deploy job. This **overrides** the OIDC subject claim to be environment-based, regardless of which branch the workflow was dispatched from.
 
 **Subject claim:** `repo:<owner>/<repo>:environment:<name>`
 
-**Why you need it:** even though a tag push started the pipeline, the deploy job's `environment:` keyword makes the subject `repo:…:environment:<name>`, **not** `repo:…:ref:refs/tags/…`. Without these credentials, deployments fail even if you have the branch and tag credentials configured.
+**Why you need it:** the deploy job's `environment:` keyword makes the subject `repo:…:environment:<name>`, **not** the branch-based subject the CI job uses. Without these credentials, deployments fail even if you have the CI branch credential configured.
 
 ```bash
 for ENV in dev staging production; do
@@ -128,35 +96,25 @@ for ENV in dev staging production; do
 done
 ```
 
-#### For pull requests (CI only)
+#### Build-only dispatch (no deploy)
 
-**When it fires:** opening or updating a pull request targeting `main`. Only CI runs (build and test) — no deployment is triggered (`should-deploy` is `false`). Azure login is still needed if Docker build is enabled (to push the image to ACR), but since PRs don't deploy, you only need this one credential.
+**When it fires:** you dispatch the workflow with `runDeploy: false`. Only CI runs (build and test) — the deploy job is skipped. Azure login is still needed if Docker build is enabled (to push the image to ACR), so the CI branch credential covers this case; no environment credential is required.
 
-**Subject claim:** `repo:<owner>/<repo>:pull_request`
+**Subject claim:** `repo:<owner>/<repo>:ref:refs/heads/main` (the branch you dispatch from)
 
 **Pipeline flow:**
 
 ```
-open/update PR
-  └─ ci (no environment:)  → subject: repo:…:pull_request  ← needs this credential
-       └─ (no deploy)
-```
-
-```bash
-az ad app federated-credential create --id <app-id> --parameters '{
-  "name": "github-pr",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:<owner>/<repo>:pull_request",
-  "audiences": ["api://AzureADTokenExchange"],
-  "description": "CI for pull requests"
-}'
+dispatch (runDeploy: false)
+  └─ ci (no environment:)  → subject: repo:…:ref:refs/heads/main  ← covered by the branch credential
+       └─ (deploy skipped)
 ```
 
 #### Custom environment names
 
-The `resolve-version` action outputs `staging` for prerelease tags (`-alpha`, `-beta`, `-rc`) and `production` for stable release tags. However, the CI workflow's `environment-override` input allows consumers to use any environment name they want (e.g., `uat` instead of `staging`).
+The `environment` dropdown lists whatever environment names you define in your consumer workflow (e.g., `uat` instead of `staging`).
 
-If your consumer pipeline passes `environment: uat` to the CD workflow, the deploy job's OIDC subject becomes `repo:<owner>/<repo>:environment:uat` — **not** `environment:staging`. The federated credential must match the **actual environment name used in the workflow**, not the auto-resolved name.
+If your consumer pipeline passes `environment: uat` to the CD workflow, the deploy job's OIDC subject becomes `repo:<owner>/<repo>:environment:uat`. The federated credential must match the **actual environment name used in the workflow**.
 
 ```bash
 # Example: if you use "uat" instead of "staging"
@@ -232,6 +190,8 @@ az role assignment create \
 | `AZURE_TENANT_ID` | Azure AD tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
 
+> **Tip (`cd-appservice.yml`):** these three identifiers are not secret. Instead of configuring repository secrets you can pass them as the `client-id`, `tenant-id`, and `subscription-id` workflow inputs (for example, read from a `bicepparam`). When those inputs are empty the workflow falls back to the `AZURE_*` secrets.
+
 ### 6. Workflow Permissions
 
 The CI workflow already includes the required permissions:
@@ -258,7 +218,7 @@ Approval gates let you require manual approval before deploying to sensitive env
 The CD workflows (`cd-appservice.yml`, `cd-aks.yml`) already use `environment: ${{ inputs.environment }}` on the deploy job. When GitHub sees this keyword, it automatically checks whether that environment has protection rules. If reviewers are required, the job pauses and waits for approval before running.
 
 ```
-push tag v1.0.0
+dispatch (environment: production)
   └─ ci (runs immediately)
        └─ deploy-production (environment: production)
             └─ ⏸ Waiting for approval from required reviewers...
@@ -306,7 +266,7 @@ The subject claim does not match any federated credential. Common causes:
 
 - Missing environment credential (the CD workflows use `environment:` which changes the subject)
 - Repository name mismatch (check `repo:owner/name` in the subject)
-- Branch/tag pattern mismatch
+- Branch mismatch (the CI job uses the branch you dispatch from — add a `branch-*` credential for each branch)
 
 ### "AADSTS700024: Client assertion is not within its valid time range"
 

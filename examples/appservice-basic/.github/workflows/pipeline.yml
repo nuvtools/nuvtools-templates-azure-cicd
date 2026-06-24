@@ -1,76 +1,50 @@
 name: Build & Deploy App Service
-run-name: Build & Deploy App Service 🚀 ${{ github.ref_name }}
+run-name: Build & Deploy App Service 🚀 ${{ inputs.environment }}
+
+# Basic example: .NET API deployed to Azure App Service via zip deploy.
+# Manual dispatch only — pick the target environment from the dropdown.
+# The environment name maps to a GitHub Environment, so approval gates and
+# environment secrets apply automatically (e.g. require reviewers for production).
 
 on:
-  push:
-    branches: [main]
-    tags: ['v*']
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+        default: dev
+      runDeploy:
+        description: 'Deploy after build (uncheck for build + test only)'
+        type: boolean
+        default: true
 
-# Basic example: .NET API deployed to Azure App Service via zip deploy
-# Uses deployment slots only in production for zero-downtime
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   ci:
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci.yml@v1
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/ci.yml@main
     with:
       dotnet-version: '10.0.x'
       project-path: 'src/MyApp.API/MyApp.API.csproj'
       test-path: 'tests/MyApp.UnitTests/MyApp.UnitTests.csproj'
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-  # Deploy to dev (automatic on push to main)
-  deploy-dev:
+  deploy:
     needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'dev'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
+    if: inputs.runDeploy
+    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@main
     with:
-      environment: dev
+      environment: ${{ inputs.environment }}
       app-version: ${{ needs.ci.outputs.version }}
       deploy-mode: artifact
-      app-service-name: my-app-dev
-      resource-group: rg-dev
-      app-settings-file: app-settings-dev.yml
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-  # Deploy to staging (prerelease tags)
-  deploy-staging:
-    needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'staging'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
-    with:
-      environment: staging
-      app-version: ${{ needs.ci.outputs.version }}
-      deploy-mode: artifact
-      app-service-name: my-app-staging
-      resource-group: rg-staging
-      app-settings-file: app-settings-staging.yml
-    secrets:
-      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-
-  # Deploy to production with slot swap (release tags)
-  deploy-production:
-    needs: ci
-    if: needs.ci.outputs.should-deploy == 'true' && needs.ci.outputs.environment == 'production'
-    uses: nuvtools/nuvtools-templates-azure-cicd/.github/workflows/cd-appservice.yml@v1
-    with:
-      environment: production
-      app-version: ${{ needs.ci.outputs.version }}
-      deploy-mode: artifact
-      app-service-name: my-app-prod
-      resource-group: rg-production
-      app-settings-file: app-settings-production.yml
-      use-deployment-slot: true
-      slot-name: staging
+      app-service-name: my-app-${{ inputs.environment }}
+      resource-group: rg-${{ inputs.environment }}
+      app-settings-file: app-settings-${{ inputs.environment }}.yml
     secrets:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
