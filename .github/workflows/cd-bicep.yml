@@ -1,0 +1,182 @@
+name: CD - Bicep
+
+# Reusable Bicep infrastructure deploy (subscription scope, OIDC). Validates,
+# runs what-if, then optionally applies. Generic enough to consume directly:
+# - OIDC identifiers come from inputs/secrets, or are read from the bicepparam
+#   when oidc-from-params is true (keeps them out of repo secrets).
+# - Optional resource-provider registration before deploy.
+# - An optional secret can be injected as a named env var so bicepparam
+#   readEnvironmentVariable(...) resolves it (e.g. a DB admin password).
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment (maps to a GitHub Environment for approval gates).'
+        type: string
+        required: true
+      location:
+        description: 'Deployment-metadata region (resource regions come from the bicepparam).'
+        type: string
+        required: false
+        default: 'brazilsouth'
+      working-directory:
+        description: 'Directory containing the template and parameter files.'
+        type: string
+        required: false
+        default: '.'
+      template-file:
+        description: 'Bicep template file (relative to working-directory).'
+        type: string
+        required: false
+        default: 'main.bicep'
+      parameters-file:
+        description: 'Parameter file. Defaults to environments/<environment>.bicepparam.'
+        type: string
+        required: false
+        default: ''
+      runDeploy:
+        description: 'When false, runs validate + what-if only (no apply).'
+        type: boolean
+        required: false
+        default: true
+      resourceProviders:
+        description: 'Space-separated resource providers to register before deploy (e.g. "Microsoft.App Microsoft.ContainerRegistry"). Idempotent; empty to skip.'
+        type: string
+        required: false
+        default: ''
+      submodules:
+        description: 'actions/checkout submodules value (false, true, or recursive).'
+        type: string
+        required: false
+        default: 'false'
+      oidc-from-params:
+        description: 'Read azureClientId/azureTenantId/azureSubscriptionId from the parameter file instead of using the client/tenant/subscription inputs or secrets.'
+        type: boolean
+        required: false
+        default: false
+      secret-env-name:
+        description: 'Name of an env var to populate from the BICEP_ENV_SECRET secret (for bicepparam readEnvironmentVariable). Empty to skip.'
+        type: string
+        required: false
+        default: ''
+      client-id:
+        description: 'Azure AD client ID for OIDC. Falls back to the AZURE_CLIENT_ID secret. Ignored when oidc-from-params is true.'
+        type: string
+        required: false
+        default: ''
+      tenant-id:
+        description: 'Azure AD tenant ID for OIDC. Falls back to the AZURE_TENANT_ID secret.'
+        type: string
+        required: false
+        default: ''
+      subscription-id:
+        description: 'Azure subscription ID for OIDC. Falls back to the AZURE_SUBSCRIPTION_ID secret.'
+        type: string
+        required: false
+        default: ''
+    secrets:
+      AZURE_CLIENT_ID:
+        required: false
+      AZURE_TENANT_ID:
+        required: false
+      AZURE_SUBSCRIPTION_ID:
+        required: false
+      AZURE_CLIENT_SECRET:
+        required: false
+      BICEP_ENV_SECRET:
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: bicep-deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: ${{ inputs.submodules }}
+
+      - name: Resolve parameter file
+        id: params
+        shell: bash
+        run: |
+          FILE="${{ inputs.parameters-file }}"
+          [ -z "$FILE" ] && FILE="environments/${{ inputs.environment }}.bicepparam"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      # OIDC identifiers from the bicepparam (non-secret) when requested, else from inputs/secrets.
+      - name: Read OIDC identifiers from parameter file
+        id: oidc
+        if: inputs.oidc-from-params
+        shell: bash
+        run: |
+          az bicep build-params --file "${{ steps.params.outputs.file }}" --outfile params.json
+          {
+            echo "client_id=$(jq -r '.parameters.azureClientId.value' params.json)"
+            echo "tenant_id=$(jq -r '.parameters.azureTenantId.value' params.json)"
+            echo "subscription_id=$(jq -r '.parameters.azureSubscriptionId.value' params.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Azure CLI Login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ inputs.oidc-from-params && steps.oidc.outputs.client_id || (inputs.client-id != '' && inputs.client-id || secrets.AZURE_CLIENT_ID) }}
+          tenant-id: ${{ inputs.oidc-from-params && steps.oidc.outputs.tenant_id || (inputs.tenant-id != '' && inputs.tenant-id || secrets.AZURE_TENANT_ID) }}
+          subscription-id: ${{ inputs.oidc-from-params && steps.oidc.outputs.subscription_id || (inputs.subscription-id != '' && inputs.subscription-id || secrets.AZURE_SUBSCRIPTION_ID) }}
+
+      # Inject a secret as a named env var so bicepparam readEnvironmentVariable(...) resolves it.
+      - name: Export secret env var
+        if: inputs.secret-env-name != ''
+        shell: bash
+        run: echo "::add-mask::${{ secrets.BICEP_ENV_SECRET }}"; echo "${{ inputs.secret-env-name }}=${{ secrets.BICEP_ENV_SECRET }}" >> "$GITHUB_ENV"
+
+      # Resource providers must be registered before their resources can be created.
+      # Idempotent; requires the deploy identity to have */register/action (Contributor).
+      - name: Register resource providers
+        if: inputs.resourceProviders != ''
+        shell: bash
+        run: |
+          for rp in ${{ inputs.resourceProviders }}; do
+            echo "Registering $rp..."
+            az provider register -n "$rp" --wait
+          done
+
+      - name: Validate template
+        shell: bash
+        run: |
+          az deployment sub validate \
+            --name "bicep-${{ inputs.environment }}-${{ github.run_id }}" \
+            --location "${{ inputs.location }}" \
+            --template-file "${{ inputs.template-file }}" \
+            --parameters "${{ steps.params.outputs.file }}"
+
+      - name: What-If
+        shell: bash
+        run: |
+          az deployment sub what-if \
+            --name "bicep-${{ inputs.environment }}-${{ github.run_id }}" \
+            --location "${{ inputs.location }}" \
+            --template-file "${{ inputs.template-file }}" \
+            --parameters "${{ steps.params.outputs.file }}"
+
+      - name: Deploy
+        if: ${{ inputs.runDeploy }}
+        shell: bash
+        run: |
+          az deployment sub create \
+            --name "bicep-${{ inputs.environment }}-${{ github.run_id }}" \
+            --location "${{ inputs.location }}" \
+            --template-file "${{ inputs.template-file }}" \
+            --parameters "${{ steps.params.outputs.file }}"
