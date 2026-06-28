@@ -1,0 +1,159 @@
+name: CD - Container App
+
+# Build a container image with the .NET SDK (dotnet publish /t:PublishContainer,
+# no Dockerfile), push it to ACR tagged with the commit SHA, and roll the
+# Container App to that image. The container app pulls from ACR with its
+# user-assigned managed identity, so no registry credentials are configured here.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment name (e.g., uat, prod). Maps to a GitHub Environment for approval gates.'
+        type: string
+        required: true
+      app-version:
+        description: 'Application version (used for logs/summary).'
+        type: string
+        required: false
+        default: ''
+      dotnet-version:
+        description: '.NET SDK version (e.g., 10.0.x).'
+        type: string
+        required: false
+        default: '10.0.x'
+      configuration:
+        description: 'Build configuration.'
+        type: string
+        required: false
+        default: 'Release'
+      publish-path:
+        description: 'Host .csproj to publish as a container image.'
+        type: string
+        required: true
+      acr-registry:
+        description: 'ACR login server (e.g., hdcontratocruat.azurecr.io).'
+        type: string
+        required: true
+      image-name:
+        description: 'Container repository name (without registry or tag), e.g. regis-api.'
+        type: string
+        required: true
+      image-tag:
+        description: 'Image tag. Defaults to the commit SHA.'
+        type: string
+        required: false
+        default: ''
+      container-app-name:
+        description: 'Azure Container App name for this environment.'
+        type: string
+        required: true
+      resource-group:
+        description: 'Azure resource group containing the Container App.'
+        type: string
+        required: true
+      client-id:
+        description: 'Azure AD client ID for OIDC login. Non-secret; pass as input (e.g. read from a bicepparam). Falls back to the AZURE_CLIENT_ID secret when empty.'
+        type: string
+        required: false
+        default: ''
+      tenant-id:
+        description: 'Azure AD tenant ID for OIDC login. Falls back to the AZURE_TENANT_ID secret when empty.'
+        type: string
+        required: false
+        default: ''
+      subscription-id:
+        description: 'Azure subscription ID for OIDC login. Falls back to the AZURE_SUBSCRIPTION_ID secret when empty.'
+        type: string
+        required: false
+        default: ''
+    secrets:
+      AZURE_CLIENT_ID:
+        required: false
+      AZURE_TENANT_ID:
+        required: false
+      AZURE_SUBSCRIPTION_ID:
+        required: false
+      AZURE_CLIENT_SECRET:
+        required: false
+    outputs:
+      image-uri:
+        description: 'Full image URI deployed to the Container App.'
+        value: ${{ jobs.deploy.outputs.image-uri }}
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      image-uri: ${{ steps.build-push.outputs.image-uri }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Azure login
+        uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@main
+        with:
+          client-id: ${{ inputs.client-id != '' && inputs.client-id || secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ inputs.tenant-id != '' && inputs.tenant-id || secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ inputs.subscription-id != '' && inputs.subscription-id || secrets.AZURE_SUBSCRIPTION_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+
+      - name: Resolve image tag
+        id: tag
+        shell: bash
+        run: |
+          TAG="${{ inputs.image-tag }}"
+          [ -z "$TAG" ] && TAG="${{ github.sha }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: ACR login
+        shell: bash
+        run: |
+          # Registry name is the login server without the domain suffix.
+          REGISTRY_NAME="${{ inputs.acr-registry }}"
+          REGISTRY_NAME="${REGISTRY_NAME%%.*}"
+          az acr login --name "$REGISTRY_NAME"
+
+      - name: Build and push container image
+        id: build-push
+        shell: bash
+        run: |
+          IMAGE_URI="${{ inputs.acr-registry }}/${{ inputs.image-name }}:${{ steps.tag.outputs.tag }}"
+          dotnet publish "${{ inputs.publish-path }}" \
+            -c "${{ inputs.configuration }}" \
+            /t:PublishContainer \
+            -p ContainerRegistry="${{ inputs.acr-registry }}" \
+            -p ContainerRepository="${{ inputs.image-name }}" \
+            -p ContainerImageTag="${{ steps.tag.outputs.tag }}"
+          echo "image-uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+          echo "Pushed $IMAGE_URI"
+
+      - name: Update Container App
+        shell: bash
+        run: |
+          az containerapp update \
+            --name "${{ inputs.container-app-name }}" \
+            --resource-group "${{ inputs.resource-group }}" \
+            --image "${{ steps.build-push.outputs.image-uri }}"
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          echo "### Container App Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Container App | \`${{ inputs.container-app-name }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | \`${{ inputs.environment }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | \`${{ steps.build-push.outputs.image-uri }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Version | \`${{ inputs.app-version }}\` |" >> "$GITHUB_STEP_SUMMARY"
