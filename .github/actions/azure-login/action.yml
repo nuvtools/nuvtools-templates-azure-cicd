@@ -21,7 +21,7 @@ runs:
   steps:
     - name: Azure Login (OIDC)
       if: inputs.client-secret == ''
-      uses: azure/login@v2
+      uses: azure/login@v3
       with:
         client-id: ${{ inputs.client-id }}
         tenant-id: ${{ inputs.tenant-id }}
@@ -29,7 +29,7 @@ runs:
 
     - name: Azure Login (Service Principal)
       if: inputs.client-secret != ''
-      uses: azure/login@v2
+      uses: azure/login@v3
       with:
         creds: |
           {

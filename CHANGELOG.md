@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- `azure-login` composite action now uses `azure/login@v3`
 - Workflows are now driven by manual `workflow_dispatch` with an `environment` choice dropdown chosen by the operator — there is no automatic environment inference from git refs anymore
 - `ci.yml` dropped the `resolve` job; it now outputs only `version` and takes an optional `app-version` input (defaults to `${{ github.run_number }}`)
 - `ci-docker.yml` dropped the `resolve` job and the `should-deploy` gate (its Docker push job always runs); it takes optional `image-tag` (defaults to run number) and `push` inputs, and outputs `version` and `image-uri`
