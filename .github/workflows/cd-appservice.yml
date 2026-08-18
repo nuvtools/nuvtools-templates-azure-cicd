@@ -102,11 +102,11 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout consumer repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout config repo
         if: inputs.config-repo != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ inputs.config-repo }}
           ref: ${{ inputs.config-repo-ref }}
@@ -124,7 +124,7 @@ jobs:
       # --- Artifact mode (zip deploy) ---
       - name: Download build artifact
         if: inputs.deploy-mode == 'artifact'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact-name }}
           path: ./deploy-package

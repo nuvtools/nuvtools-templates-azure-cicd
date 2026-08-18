@@ -97,7 +97,7 @@ jobs:
           echo "Image tag: $VERSION"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build and test
         uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/dotnet-build-test@main
@@ -117,7 +117,7 @@ jobs:
       image-uri: ${{ steps.build-push.outputs.image-uri }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Azure login
         uses: nuvtools/nuvtools-templates-azure-cicd/.github/actions/azure-login@main

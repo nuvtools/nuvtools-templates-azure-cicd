@@ -34,7 +34,7 @@ runs:
   using: 'composite'
   steps:
     - name: Setup .NET SDK
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
@@ -75,7 +75,7 @@ runs:
 
     - name: Upload test results
       if: inputs.test-path != '' && always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: test-results
         path: ./test-results/
@@ -93,7 +93,7 @@ runs:
 
     - name: Upload build artifact
       if: inputs.publish-artifacts == 'true'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.artifact-name }}
         path: ./publish/

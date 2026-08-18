@@ -88,11 +88,11 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout consumer repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Checkout config repo
         if: inputs.config-repo != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ inputs.config-repo }}
           ref: ${{ inputs.config-repo-ref }}
@@ -109,7 +109,7 @@ jobs:
 
       - name: Checkout default chart
         if: inputs.chart-path == ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: nuvtools/nuvtools-templates-azure-cicd
           ref: main
